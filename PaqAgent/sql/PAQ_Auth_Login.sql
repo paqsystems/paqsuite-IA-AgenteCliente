@@ -7,8 +7,23 @@
   Laravel valida password con Hash::check contra password_hash (solo si status=OK)
   y genera token Sanctum localmente (no toca este SP).
 
-  Esquema: legacy PascalCase (Diccionario_000205_012 / TEC_METAL)
-    USERS, pq_permiso (IDRol, IDEmpresa, IDUsuario), pq_rol, pq_empresa
+  Detección dinámica de esquema de columnas
+  -----------------------------------------
+  Las tablas pq_permiso, pq_rol y pq_empresa existen en dos variantes según el
+  cliente:
+    - Legacy Tango (ej. Tec-Metal): PascalCase  (IDRol, IDEmpresa, AccesoTotal…)
+    - Híbrido Laravel (ej. diccionario_klaus): snake_case (id_rol, id_empresa…)
+
+  Al inicio de cada ejecución este SP consulta INFORMATION_SCHEMA.COLUMNS y
+  resuelve el nombre real de cada columna con la misma regla que AuthService.php
+  en PHP (Schema::hasColumn): legacy primero, snake_case como fallback.
+
+  USERS no tiene esta ambigüedad (mismos nombres en ambos perfiles) y se
+  consulta con SQL estático.
+
+  Las secciones que referencian columnas ambiguas (es_admin, empresas) se
+  ejecutan con sp_executesql: nombres de columna vía QUOTENAME(), valores vía
+  parámetros tipados (@UserId).
 
   Salida: DOS result sets fijos (siempre en este orden):
     1) Header  — exactamente 1 fila (status + datos usuario / metadatos)
@@ -48,6 +63,22 @@ BEGIN
     DECLARE @EmpresaCount             INT = 0;
     DECLARE @ErrorMessage             NVARCHAR(500) = NULL;
 
+    /* --- Nombres de columna resueltos (legacy → snake_case) --- */
+    DECLARE @ColPermisoRol            SYSNAME;
+    DECLARE @ColPermisoEmpresa        SYSNAME;
+    DECLARE @ColPermisoUsuario        SYSNAME;
+    DECLARE @ColRolPK                 SYSNAME;
+    DECLARE @ColRolAccesoTotal        SYSNAME;
+    DECLARE @ColEmpresaPK             SYSNAME;
+    DECLARE @ColEmpresaNombre         SYSNAME;
+    DECLARE @ColEmpresaNombreBD       SYSNAME;
+    DECLARE @ColEmpresaHabilita       SYSNAME;
+
+    /* --- SQL dinámico --- */
+    DECLARE @SqlAdmin                 NVARCHAR(MAX);
+    DECLARE @SqlEmpresas              NVARCHAR(MAX);
+    DECLARE @EsAdminOut               BIT;
+
     /* Temp table empresas (segundo result set) */
     CREATE TABLE #Empresas
     (
@@ -59,6 +90,90 @@ BEGIN
     );
 
     BEGIN TRY
+        /* ------------------------------------------------------------------
+           0. Detección de esquema (AuthService.php: legacy primero)
+           ------------------------------------------------------------------ */
+        SELECT @ColPermisoRol = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_permiso'
+                  AND COLUMN_NAME = N'IDRol'
+            ) THEN N'IDRol' ELSE N'id_rol' END;
+
+        SELECT @ColPermisoEmpresa = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_permiso'
+                  AND COLUMN_NAME = N'IDEmpresa'
+            ) THEN N'IDEmpresa' ELSE N'id_empresa' END;
+
+        SELECT @ColPermisoUsuario = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_permiso'
+                  AND COLUMN_NAME = N'IDUsuario'
+            ) THEN N'IDUsuario' ELSE N'id_usuario' END;
+
+        SELECT @ColRolPK = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_rol'
+                  AND COLUMN_NAME = N'IDRol'
+            ) THEN N'IDRol' ELSE N'id_rol' END;
+
+        SELECT @ColRolAccesoTotal = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_rol'
+                  AND COLUMN_NAME = N'AccesoTotal'
+            ) THEN N'AccesoTotal' ELSE N'acceso_total' END;
+
+        SELECT @ColEmpresaPK = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_empresa'
+                  AND COLUMN_NAME = N'IDEmpresa'
+            ) THEN N'IDEmpresa' ELSE N'id_empresa' END;
+
+        SELECT @ColEmpresaNombre = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_empresa'
+                  AND COLUMN_NAME = N'NombreEmpresa'
+            ) THEN N'NombreEmpresa' ELSE N'nombre_empresa' END;
+
+        SELECT @ColEmpresaNombreBD = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_empresa'
+                  AND COLUMN_NAME = N'NombreBD'
+            ) THEN N'NombreBD' ELSE N'nombre_bd' END;
+
+        SELECT @ColEmpresaHabilita = CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = N'dbo'
+                  AND TABLE_NAME = N'pq_empresa'
+                  AND COLUMN_NAME = N'Habilita'
+            ) THEN N'Habilita' ELSE N'habilita' END;
+
         /* ------------------------------------------------------------------
            1. Buscar usuario por codigo (parámetro tipado, sin concatenación)
            ------------------------------------------------------------------ */
@@ -104,33 +219,50 @@ BEGIN
         END
 
         /* ------------------------------------------------------------------
-           4b. es_admin — rol con AccesoTotal = 1
+           4b. es_admin — rol con AccesoTotal = 1 (SQL dinámico)
            ------------------------------------------------------------------ */
-        IF EXISTS (
-            SELECT 1
-            FROM dbo.pq_permiso AS p
-            INNER JOIN dbo.pq_rol AS r
-                ON p.IDRol = r.IDRol
-            WHERE p.IDUsuario = @UserId
-              AND r.AccesoTotal = 1
-        )
-            SET @EsAdmin = 1;
+        SET @EsAdminOut = 0;
+
+        SET @SqlAdmin = N'
+IF EXISTS (
+    SELECT 1
+    FROM dbo.pq_permiso AS p
+    INNER JOIN dbo.pq_rol AS r
+        ON p.' + QUOTENAME(@ColPermisoRol) + N' = r.' + QUOTENAME(@ColRolPK) + N'
+    WHERE p.' + QUOTENAME(@ColPermisoUsuario) + N' = @UserId
+      AND r.' + QUOTENAME(@ColRolAccesoTotal) + N' = 1
+)
+    SET @EsAdminOut = 1;';
+
+        EXEC sys.sp_executesql
+            @SqlAdmin,
+            N'@UserId INT, @EsAdminOut BIT OUTPUT',
+            @UserId = @UserId,
+            @EsAdminOut = @EsAdminOut OUTPUT;
+
+        SET @EsAdmin = @EsAdminOut;
 
         /* ------------------------------------------------------------------
-           4c. Empresas habilitadas del usuario
+           4c. Empresas habilitadas del usuario (SQL dinámico)
            ------------------------------------------------------------------ */
-        INSERT INTO #Empresas (id, nombreEmpresa, nombreBd, theme, imagen)
-        SELECT DISTINCT
-            e.IDEmpresa,
-            e.NombreEmpresa,
-            e.NombreBD,
-            ISNULL(e.theme, N'default'),
-            e.imagen
-        FROM dbo.pq_permiso AS p
-        INNER JOIN dbo.pq_empresa AS e
-            ON p.IDEmpresa = e.IDEmpresa
-        WHERE p.IDUsuario = @UserId
-          AND (e.Habilita IS NULL OR e.Habilita IN (0, 1));
+        SET @SqlEmpresas = N'
+INSERT INTO #Empresas (id, nombreEmpresa, nombreBd, theme, imagen)
+SELECT DISTINCT
+    e.' + QUOTENAME(@ColEmpresaPK) + N',
+    e.' + QUOTENAME(@ColEmpresaNombre) + N',
+    e.' + QUOTENAME(@ColEmpresaNombreBD) + N',
+    ISNULL(e.theme, N''default''),
+    e.imagen
+FROM dbo.pq_permiso AS p
+INNER JOIN dbo.pq_empresa AS e
+    ON p.' + QUOTENAME(@ColPermisoEmpresa) + N' = e.' + QUOTENAME(@ColEmpresaPK) + N'
+WHERE p.' + QUOTENAME(@ColPermisoUsuario) + N' = @UserId
+  AND (e.' + QUOTENAME(@ColEmpresaHabilita) + N' IS NULL OR e.' + QUOTENAME(@ColEmpresaHabilita) + N' IN (0, 1));';
+
+        EXEC sys.sp_executesql
+            @SqlEmpresas,
+            N'@UserId INT',
+            @UserId = @UserId;
 
         SELECT @EmpresaCount = COUNT(*) FROM #Empresas;
 
