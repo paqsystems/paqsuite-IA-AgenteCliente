@@ -27,7 +27,7 @@ el agente no están disponibles.
   (`AuthLoginOperation.cs`) y rama dedicada en `JobDispatcher` — no pasa
   por el flujo genérico de `StoredProcedureOperation`.
 - **Nuevo:** Stored Procedure `PAQ_Auth_Login` (en
-  `PaqAgent/sql/PAQ_Auth_Login.sql`), con **detección dinámica de esquema**
+  `PaqAgent/sql/migrations/2026_06_24_000001_create_paq_auth_login.sql`), con **detección dinámica de esquema**
   de columnas (legacy PascalCase vs snake_case moderno), replicando la
   misma lógica que `Schema::hasColumn()` ya usa en el backend PHP.
 - Bug encontrado y corregido en el SP: el fallback de `@ColRolPK` y

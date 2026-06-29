@@ -262,7 +262,7 @@ Si `sqlConnectionOk=False`, revisar la sección `SqlConnection` del paso 3.3.
 ## 7. Probar `auth.login` (end-to-end completo)
 
 Requiere que el SP `PAQ_Auth_Login` ya exista en la base configurada en 3.3
-(ver script en `PaqAgent/sql/PAQ_Auth_Login.sql`).
+(ver migración en `PaqAgent/sql/migrations/2026_06_24_000001_create_paq_auth_login.sql`; el agente la aplica al arrancar).
 
 ```powershell
 $body = @{
