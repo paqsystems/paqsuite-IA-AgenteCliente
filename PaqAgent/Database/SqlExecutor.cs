@@ -154,6 +154,130 @@ public class SqlExecutor : ISqlExecutor
 
 
 
+    public async Task ExecuteNonQueryAsync(
+
+        string sql,
+
+        int timeoutSeconds,
+
+        CancellationToken cancellationToken = default)
+
+    {
+
+        await ExecuteNonQueryAsync(sql, new Dictionary<string, object?>(), timeoutSeconds, cancellationToken);
+
+    }
+
+
+
+    public async Task ExecuteNonQueryAsync(
+
+        string sql,
+
+        Dictionary<string, object?> parameters,
+
+        int timeoutSeconds,
+
+        CancellationToken cancellationToken = default)
+
+    {
+
+        await using var connection = new SqlConnection(_settings.BuildConnectionString());
+
+        await connection.OpenAsync(cancellationToken);
+
+
+
+        await using var command = new SqlCommand(sql, connection)
+
+        {
+
+            CommandType = CommandType.Text,
+
+            CommandTimeout = timeoutSeconds
+
+        };
+
+
+
+        foreach (var (name, value) in parameters)
+
+        {
+
+            var paramName = name.StartsWith('@') ? name : $"@{name}";
+
+            command.Parameters.AddWithValue(paramName, value ?? DBNull.Value);
+
+        }
+
+
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+
+    }
+
+
+
+    public async Task<IReadOnlyList<string>> QueryStringColumnAsync(
+
+        string sql,
+
+        string columnName,
+
+        int timeoutSeconds,
+
+        CancellationToken cancellationToken = default)
+
+    {
+
+        await using var connection = new SqlConnection(_settings.BuildConnectionString());
+
+        await connection.OpenAsync(cancellationToken);
+
+
+
+        await using var command = new SqlCommand(sql, connection)
+
+        {
+
+            CommandType = CommandType.Text,
+
+            CommandTimeout = timeoutSeconds
+
+        };
+
+
+
+        var values = new List<string>();
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+
+
+        var columnOrdinal = reader.GetOrdinal(columnName);
+
+
+
+        while (await reader.ReadAsync(cancellationToken))
+
+        {
+
+            values.Add(reader.IsDBNull(columnOrdinal)
+
+                ? string.Empty
+
+                : reader.GetString(columnOrdinal));
+
+        }
+
+
+
+        return values;
+
+    }
+
+
+
     private static SqlCommand BuildCommand(
 
         string storedProcedure,

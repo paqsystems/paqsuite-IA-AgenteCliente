@@ -26,6 +26,11 @@
     <Compile Remove="tools\**" />
     <EmbeddedResource Remove="tools\**" />
     <None Remove="tools\**" />
+    <EmbeddedResource Remove="sql\tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="sql\migrations\**\*.sql" />
   </ItemGroup>
 
 </Project>

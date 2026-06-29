@@ -32,5 +32,39 @@ public interface ISqlExecutor
 
     Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default);
 
+
+
+    Task ExecuteNonQueryAsync(
+
+        string sql,
+
+        int timeoutSeconds,
+
+        CancellationToken cancellationToken = default);
+
+
+
+    Task ExecuteNonQueryAsync(
+
+        string sql,
+
+        Dictionary<string, object?> parameters,
+
+        int timeoutSeconds,
+
+        CancellationToken cancellationToken = default);
+
+
+
+    Task<IReadOnlyList<string>> QueryStringColumnAsync(
+
+        string sql,
+
+        string columnName,
+
+        int timeoutSeconds,
+
+        CancellationToken cancellationToken = default);
+
 }
 
