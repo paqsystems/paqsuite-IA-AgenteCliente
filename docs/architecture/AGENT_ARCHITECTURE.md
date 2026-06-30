@@ -1,89 +1,136 @@
-# PAQSuite IA Tango - Arquitectura del Agente Local
+# PAQSuite IA Tango
+# Arquitectura del Agente Local (PaqAgent)
 
-## 1. Objetivo
+## Objetivo
 
-Este documento define la arquitectura del componente **PaqAgent**, un agente local instalado en el servidor del cliente para permitir que PAQSuite IA Tango consulte datos de Tango Gestion / SQL Server sin abrir puertos entrantes en la red del cliente y sin depender de una VPN como mecanismo principal de consulta.
+Reemplazar el acceso directo desde AWS hacia los SQL Server de los clientes mediante VPN/Tailscale por una arquitectura basada en un agente local instalado en cada servidor cliente.
 
-El objetivo es reemplazar el esquema:
+La nueva arquitectura debe:
 
-```text
-Laravel AWS -> VPN/Tailscale -> SQL Server del cliente
-```
-
-por el esquema:
-
-```text
-Laravel AWS -> Agent Gateway -> PaqAgent local -> SQL Server Tango
-```
-
-El agente debe permitir consultas bajo demanda, iniciadas funcionalmente desde Laravel/AWS, pero usando una conexion saliente persistente abierta por el propio agente.
+- Evitar accesos SQL remotos desde AWS.
+- Evitar apertura de puertos entrantes en los clientes.
+- Permitir consultas bajo demanda.
+- Reducir latencia.
+- Mejorar seguridad.
+- Facilitar instalación y soporte.
+- Escalar a cientos de clientes.
 
 ---
 
-## 2. Principios de diseno
-
-1. El cliente no debe abrir puertos entrantes.
-2. SQL Server no debe exponerse a Internet.
-3. El agente debe iniciar siempre la comunicacion hacia AWS.
-4. Las consultas deben ser bajo demanda, no por polling periodico obligatorio.
-5. El agente no debe ejecutar SQL libre recibido desde AWS.
-6. Toda operacion debe estar basada en una lista blanca de operaciones permitidas.
-7. Cada operacion debe ser auditable.
-8. El cache debe ser opcional y parametrizable.
-9. El modo por defecto debe ser `live`, para evitar informacion desactualizada.
-10. La solucion debe poder escalar a multiples clientes y multiples agentes.
-
----
-
-## 3. Arquitectura general
+# Arquitectura General
 
 ```text
-                +---------------------+
-                | Laravel AWS / Forge |
-                | Backend principal   |
-                +----------+----------+
-                           |
-                           | HTTP interno / API privada
-                           |
-                           v
-                +---------------------+
-                | Agent Gateway       |
-                | WebSocket/SignalR   |
-                +----------+----------+
-                           |
-                           | Conexion saliente persistente
-                           |
-        +------------------+------------------+
-        |                  |                  |
-        v                  v                  v
-+---------------+  +---------------+  +---------------+
-| PaqAgent      |  | PaqAgent      |  | PaqAgent      |
-| Cliente A     |  | Cliente B     |  | Cliente C     |
-+------+--------+  +------+--------+  +------+--------+
-       |                  |                  |
-       v                  v                  v
-+---------------+  +---------------+  +---------------+
-| SQL Server    |  | SQL Server    |  | SQL Server    |
-| Tango         |  | Tango         |  | Tango         |
-+---------------+  +---------------+  +---------------+
+                ┌─────────────────────┐
+                │ Laravel AWS / Forge │
+                │     Backend API     │
+                └──────────┬──────────┘
+                           │
+                           │ HTTP Interno
+                           │
+                           ▼
+                ┌─────────────────────┐
+                │ Agent Gateway       │
+                │ WebSocket / SignalR │
+                └──────────┬──────────┘
+                           │
+          Conexiones salientes permanentes
+                           │
+         ┌─────────────────┼─────────────────┐
+         ▼                 ▼                 ▼
+
+ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+ │ PaqAgent    │  │ PaqAgent    │  │ PaqAgent    │
+ │ Cliente A   │  │ Cliente B   │  │ Cliente C   │
+ └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+        │                │                │
+        ▼                ▼                ▼
+
+ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+ │ SQL Server  │  │ SQL Server  │  │ SQL Server  │
+ │ Tango       │  │ Tango       │  │ Tango       │
+ └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
 ---
 
-## 4. Tecnologia recomendada
+# Principio de funcionamiento
 
-### Plataforma
+El agente inicia una conexión saliente permanente hacia AWS.
 
-- .NET 8
-- Worker Service
-- Instalacion como Windows Service
+AWS nunca abre conexiones entrantes hacia el cliente.
 
-### Dependencias sugeridas
+El agente mantiene un canal persistente mediante:
+
+- SignalR
+- o WebSocket
+
+preferentemente sobre:
 
 ```text
-Microsoft.Extensions.Hosting.WindowsServices
+TCP 443
+HTTPS
+```
+
+para evitar configuraciones especiales de red.
+
+---
+
+# Flujo de una consulta
+
+```text
+Usuario
+    │
+    ▼
+Laravel API
+    │
+    ▼
+Agent Gateway
+    │
+    ▼
+PaqAgent
+    │
+    ▼
+SQL Server Tango
+    │
+    ▼
+PaqAgent
+    │
+    ▼
+Agent Gateway
+    │
+    ▼
+Laravel API
+    │
+    ▼
+Usuario
+```
+
+---
+
+# Tecnología del Agente
+
+## Plataforma
+
+.NET 8
+
+## Tipo de aplicación
+
+Worker Service
+
+Instalable como:
+
+```text
+Windows Service
+```
+
+---
+
+# Dependencias sugeridas
+
+```text
 Microsoft.AspNetCore.SignalR.Client
 Microsoft.Data.SqlClient
+Microsoft.Extensions.Hosting.WindowsServices
 Serilog
 Serilog.Sinks.File
 Polly
@@ -92,57 +139,37 @@ System.Text.Json
 
 ---
 
-## 5. Estructura sugerida del proyecto
+# Nombre del producto
+
+```text
+PaqAgent
+```
+
+---
+
+# Estructura del proyecto
 
 ```text
 PaqAgent/
+
 ├── Configuration/
-│   ├── AgentSettings.cs
-│   ├── SqlConnectionSettings.cs
-│   └── OperationSettings.cs
 ├── Communication/
-│   ├── IAgentConnection.cs
-│   ├── SignalRAgentConnection.cs
-│   └── WebSocketAgentConnection.cs
 ├── Database/
-│   ├── ISqlExecutor.cs
-│   ├── SqlExecutor.cs
-│   └── SqlParameterMapper.cs
 ├── Jobs/
-│   ├── JobDispatcher.cs
-│   ├── JobExecutionContext.cs
-│   └── JobResultFactory.cs
 ├── Operations/
-│   ├── IOperationHandler.cs
-│   ├── OperationRegistry.cs
-│   ├── ClientesBuscarOperation.cs
-│   ├── ArticulosBuscarOperation.cs
-│   ├── StockConsultarOperation.cs
-│   └── SaldosConsultarOperation.cs
 ├── Security/
-│   ├── TokenProvider.cs
-│   └── AgentAuthenticator.cs
 ├── Logging/
-│   └── LogConfiguration.cs
 ├── Models/
-│   ├── AgentIdentity.cs
-│   ├── AgentJob.cs
-│   ├── AgentJobResult.cs
-│   ├── AgentHeartbeat.cs
-│   └── AgentStatus.cs
 ├── Services/
-│   ├── Worker.cs
-│   ├── HeartbeatService.cs
-│   └── DiagnosticsService.cs
 ├── Program.cs
 └── appsettings.json
 ```
 
 ---
 
-## 6. Configuracion local
+# Configuración local
 
-Archivo sugerido:
+Archivo:
 
 ```text
 appsettings.json
@@ -152,48 +179,36 @@ Ejemplo:
 
 ```json
 {
-  "Agent": {
-    "AgentId": "cliente001-servidortm",
-    "ClientId": "cliente001",
-    "DisplayName": "Servidor Tango Cliente 001",
-    "Version": "1.0.0",
-    "GatewayUrl": "https://gateway.paqsuite.com/agent-hub",
-    "ApiBaseUrl": "https://api.paqsuite.com",
-    "AgentToken": "TOKEN_SECRETO_DEL_AGENTE",
-    "HeartbeatSeconds": 30,
-    "DefaultTimeoutSeconds": 30,
-    "MaxTimeoutSeconds": 120
-  },
+  "AgentId": "cliente001-servidortm",
+  "ClientId": "cliente001",
+
+  "GatewayUrl": "https://gateway.paqsuite.com",
+
+  "AgentToken": "TOKEN_SECRETO",
+
   "SqlConnection": {
     "Server": "SERVIDORTM\\AXSQLEXPRESS",
     "Database": "TANGO_GESTION",
-    "User": "usuario_sql",
-    "Password": "clave_sql",
-    "Encrypt": false,
+    "User": "usuario",
+    "Password": "clave",
     "TrustServerCertificate": true,
-    "ConnectionTimeoutSeconds": 15,
-    "CommandTimeoutSeconds": 30
-  },
-  "Logging": {
-    "LogDirectory": "logs",
-    "MinimumLevel": "Information"
+    "Encrypt": false
   }
 }
 ```
 
 ---
 
-## 7. Identificacion del agente
+# Identificación del Agente
 
-Cada agente debe identificarse mediante:
+Cada agente debe poseer:
 
-- `AgentId`
-- `ClientId`
-- `Version`
-- `MachineName`
-- `OSVersion`
-- `SqlServerName`
-- `SqlDatabase`
+```text
+AgentId
+ClientId
+Version
+MachineName
+```
 
 Ejemplo:
 
@@ -202,36 +217,13 @@ Ejemplo:
   "agentId": "cliente001-servidortm",
   "clientId": "cliente001",
   "version": "1.0.0",
-  "machineName": "SERVIDORTM",
-  "sqlServerName": "SERVIDORTM\\AXSQLEXPRESS",
-  "sqlDatabase": "TANGO_GESTION"
+  "machineName": "SERVIDORTM"
 }
 ```
 
 ---
 
-## 8. Comunicacion con AWS
-
-El agente inicia una conexion saliente hacia el Agent Gateway.
-
-```text
-PaqAgent -> HTTPS/WSS 443 -> Agent Gateway AWS
-```
-
-Aunque la consulta sea funcionalmente iniciada por AWS, tecnicamente AWS envia el pedido por un canal ya abierto por el agente.
-
-Esto evita:
-
-- apertura de puertos entrantes en el cliente;
-- exposicion directa de SQL Server;
-- dependencia de VPN para cada consulta;
-- configuraciones complejas en routers o firewalls.
-
----
-
-## 9. Heartbeat
-
-El agente debe enviar un heartbeat periodico al gateway.
+# Heartbeat
 
 Frecuencia sugerida:
 
@@ -239,98 +231,49 @@ Frecuencia sugerida:
 30 segundos
 ```
 
-Payload:
+Información enviada:
 
 ```json
 {
   "agentId": "cliente001-servidortm",
-  "clientId": "cliente001",
-  "timestampUtc": "2026-01-01T10:00:00Z",
+  "timestamp": "2026-01-01T10:00:00",
   "status": "online",
-  "version": "1.0.0",
-  "machineName": "SERVIDORTM"
+  "version": "1.0.0"
 }
 ```
 
 ---
 
-## 10. Modelo de job
+# Seguridad
 
-Ejemplo de job recibido desde AWS:
+## Autenticación
 
-```json
-{
-  "jobId": "job_123456",
-  "clientId": "cliente001",
-  "agentId": "cliente001-servidortm",
-  "operation": "clientes.buscar",
-  "parameters": {
-    "texto": "GARCIA",
-    "limit": 20
-  },
-  "timeoutSeconds": 30,
-  "requestedAtUtc": "2026-01-01T10:00:00Z"
-}
-```
+JWT o Token fijo.
 
----
-
-## 11. Modelo de respuesta
-
-Respuesta exitosa:
-
-```json
-{
-  "jobId": "job_123456",
-  "agentId": "cliente001-servidortm",
-  "status": "success",
-  "durationMs": 420,
-  "data": [
-    {
-      "codigo": "000123",
-      "razonSocial": "Cliente Demo SA",
-      "cuit": "30700000001"
-    }
-  ],
-  "error": null
-}
-```
-
-Respuesta con error:
-
-```json
-{
-  "jobId": "job_123456",
-  "agentId": "cliente001-servidortm",
-  "status": "failed",
-  "durationMs": 125,
-  "data": null,
-  "error": {
-    "code": "SQL_TIMEOUT",
-    "message": "La consulta supero el tiempo maximo permitido."
-  }
-}
-```
-
----
-
-## 12. Estados posibles de un job
+Cada instalación posee:
 
 ```text
-pending
-received
-running
-success
-failed
-timeout
-cancelled
+AgentToken
+```
+
+único.
+
+---
+
+## TLS
+
+Toda comunicación debe realizarse mediante:
+
+```text
+HTTPS
+WSS
 ```
 
 ---
 
-## 13. Operaciones permitidas
+# Operaciones Permitidas
 
-El agente no debe ejecutar SQL libre recibido desde AWS.
+El agente NO debe ejecutar SQL libre enviado por AWS.
 
 Prohibido:
 
@@ -340,91 +283,104 @@ Prohibido:
 }
 ```
 
-Permitido:
+---
+
+# Lista Blanca de Operaciones
+
+Ejemplo:
 
 ```json
 {
+  "clientes.buscar": {},
+  "clientes.obtener": {},
+  "articulos.buscar": {},
+  "stock.consultar": {},
+  "saldos.consultar": {},
+  "pedidos.obtener": {}
+}
+```
+
+---
+
+# Mapeo interno
+
+```text
+clientes.buscar
+        │
+        ▼
+PAQ_Clientes_Buscar
+
+stock.consultar
+        │
+        ▼
+PAQ_Stock_Consultar
+```
+
+---
+
+# Modelo de Job
+
+```json
+{
+  "jobId": "job_123456",
   "operation": "clientes.buscar",
   "parameters": {
-    "texto": "GARCIA"
+    "codigo": "000123"
+  },
+  "timeoutSeconds": 30
+}
+```
+
+---
+
+# Resultado de Job
+
+```json
+{
+  "jobId": "job_123456",
+  "status": "success",
+  "durationMs": 420,
+  "data": {
   }
 }
 ```
 
 ---
 
-## 14. Lista blanca inicial de operaciones
-
-Operaciones sugeridas para el MVP:
+# Estados posibles
 
 ```text
-clientes.buscar
-clientes.obtener
-articulos.buscar
-articulos.obtener
-stock.consultar
-saldos.consultar
-pedidos.pendientes
-comprobantes.recientes
+pending
+running
+success
+failed
+timeout
+cancelled
 ```
 
 ---
 
-## 15. Mapeo interno de operaciones
+# Timeouts
 
-El agente debe traducir operaciones logicas a stored procedures o consultas parametrizadas locales.
-
-Ejemplo:
+Timeout sugerido:
 
 ```text
-clientes.buscar -> EXEC PAQ_Clientes_Buscar @texto, @limit
-clientes.obtener -> EXEC PAQ_Clientes_Obtener @codigo
-stock.consultar -> EXEC PAQ_Stock_Consultar @codigoArticulo, @deposito
-saldos.consultar -> EXEC PAQ_Saldos_Consultar @codigoCliente
+30 segundos
 ```
 
----
-
-## 16. Parametrizacion segura
-
-Todas las consultas deben usar parametros SQL.
-
-No concatenar valores del usuario dentro de strings SQL.
-
-Correcto:
-
-```csharp
-command.Parameters.AddWithValue("@texto", texto);
-```
-
-Incorrecto:
-
-```csharp
-var sql = "SELECT * FROM Clientes WHERE Nombre LIKE '%" + texto + "%'";
-```
-
----
-
-## 17. Timeouts
-
-Valores sugeridos:
+Máximo:
 
 ```text
-Conexion SQL: 15 segundos
-Comando SQL por defecto: 30 segundos
-Maximo configurable: 120 segundos
-Job completo: 30 a 120 segundos
+120 segundos
 ```
-
-Si un job excede el timeout, el agente debe devolver estado `timeout`.
 
 ---
 
-## 18. Reconexion
+# Reconexión
 
-El agente debe reconectarse automaticamente si pierde conexion con el gateway.
+Utilizar Polly.
 
-Estrategia sugerida:
+Estrategia:
 
 ```text
 5 segundos
@@ -434,132 +390,74 @@ Estrategia sugerida:
 60 segundos
 ```
 
-Luego mantener reintentos cada 60 segundos.
-
-Libreria recomendada:
-
-```text
-Polly
-```
+hasta reconectar.
 
 ---
 
-## 19. Logs
+# Logs
 
-Directorio sugerido:
+Directorio:
 
 ```text
 logs/
 ```
 
-Archivos sugeridos:
+Archivos:
 
 ```text
 agent.log
-connection.log
-jobs.log
 errors.log
+connection.log
 ```
-
-Eventos a registrar:
-
-- inicio del servicio;
-- detencion del servicio;
-- conexion al gateway;
-- reconexion;
-- heartbeat;
-- recepcion de job;
-- finalizacion de job;
-- errores SQL;
-- errores de autenticacion;
-- errores de configuracion.
 
 ---
 
-## 20. Diagnostico local
+# Caché
 
-El agente debe incluir una funcion de diagnostico que valide:
+El agente NO debe depender del caché para funcionar.
 
-1. lectura de configuracion;
-2. conexion al gateway;
-3. autenticacion;
-4. conexion a SQL Server;
-5. acceso a base de datos Tango;
-6. ejecucion de una consulta simple;
-7. version del agente.
-
-Operacion sugerida:
+Por defecto:
 
 ```text
-diagnostics.run
+LIVE
 ```
 
 ---
 
-## 21. Cache
-
-El agente no debe depender del cache para funcionar.
-
-Por defecto, las operaciones deben ejecutarse en modo:
+# Modos soportados
 
 ```text
-live
-```
-
-Los modos de cache se gestionaran principalmente desde Laravel, pero el agente debe estar preparado para recibir instrucciones de cache si en el futuro se define cache local.
-
-Modos previstos:
-
-```text
-live
-cache_first
-live_refresh
-cache_only
+LIVE
+CACHE_FIRST
+LIVE_REFRESH
+CACHE_ONLY
 ```
 
 ---
 
-## 22. Instalacion como Windows Service
+# Actualizaciones futuras
 
-El agente debe poder instalarse como servicio Windows.
+El agente deberá estar preparado para:
 
-Ejemplo conceptual:
-
-```powershell
-sc.exe create PaqAgent binPath= "C:\PaqAgent\PaqAgent.exe"
-sc.exe start PaqAgent
-```
-
-Tambien se puede considerar instalacion mediante PowerShell o instalador MSI.
-
----
-
-## 23. Actualizaciones futuras
-
-El diseno debe prever:
-
-- actualizacion automatica o semiautomatica;
-- instalacion silenciosa;
-- monitoreo remoto;
-- compresion de respuestas;
-- metricas de performance;
-- soporte para multiples bases Tango en el mismo servidor;
-- soporte para multiples agentes por cliente;
-- firma de binarios;
-- rotacion de tokens;
-- diagnostico remoto.
+- auto actualización
+- instalación silenciosa
+- monitoreo remoto
+- diagnóstico remoto
+- compresión de respuestas
+- ejecución concurrente de jobs
+- métricas de performance
 
 ---
 
-## 24. Criterios de aceptacion para el MVP
+# Restricciones
 
-1. El agente instala como Windows Service.
-2. El agente inicia una conexion saliente al gateway.
-3. El agente se autentica con `AgentId` y `AgentToken`.
-4. El gateway puede enviar un job bajo demanda.
-5. El agente ejecuta una operacion permitida contra SQL Server local.
-6. El agente devuelve resultado JSON.
-7. No se ejecuta SQL libre recibido desde AWS.
-8. El agente registra logs.
-9. El agente reconecta automaticamente.
-10. El agente permite diagnosticar conexion SQL y conexion al gateway.
+1. No abrir puertos en clientes.
+2. No exponer SQL Server.
+3. No ejecutar SQL libre.
+4. Toda comunicación debe ser saliente.
+5. Todas las operaciones deben ser auditables.
+6. Todo resultado debe estar asociado a un JobId.
+7. Toda operación debe ser parametrizada.
+8. Mantener compatibilidad con SQL Server 2016 o superior.
+9. Optimizar para instalaciones Tango Gestión.
+10. Diseñar para cientos de agentes concurrentes.
