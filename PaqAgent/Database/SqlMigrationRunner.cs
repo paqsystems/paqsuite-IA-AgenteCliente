@@ -28,6 +28,15 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         VALUES (@migration, @batch, @checksum_sha256)
         """;
 
+    private const string ResolveNombreBdColumnSql = """
+        SELECT TOP 1 COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = N'dbo'
+          AND TABLE_NAME = N'pq_empresa'
+          AND COLUMN_NAME IN (N'NombreBD', N'nombre_bd')
+        ORDER BY CASE COLUMN_NAME WHEN N'NombreBD' THEN 0 ELSE 1 END
+        """;
+
     private readonly ISqlExecutor _sqlExecutor;
     private readonly SqlMigrationSettings _settings;
     private readonly ILogger<SqlMigrationRunner> _logger;
@@ -52,33 +61,89 @@ public class SqlMigrationRunner : ISqlMigrationRunner
 
         _logger.LogInformation("Iniciando migraciones SQL embebidas");
 
-        await EnsureSchemaAsync(cancellationToken);
+        var dictionaryScripts = SqlScriptLoader.ListDictionaryMigrationResourceNames();
+        _logger.LogInformation(
+            "Fase diccionario: {Count} migraciones embebidas",
+            dictionaryScripts.Count);
+        await RunMigrationsAsync(dictionaryScripts, databaseOverride: null, cancellationToken);
+
+        var companyScripts = SqlScriptLoader.ListCompanyMigrationResourceNames();
+        if (companyScripts.Count == 0)
+        {
+            _logger.LogInformation("Fase company: sin migraciones embebidas, omitiendo");
+            return;
+        }
+
+        _logger.LogInformation(
+            "Fase company: {Count} migraciones embebidas",
+            companyScripts.Count);
+
+        var nombreBdColumn = await ResolveNombreBdColumnAsync(cancellationToken);
+        if (nombreBdColumn is null)
+        {
+            throw new InvalidOperationException(
+                "No se encontro la columna NombreBD ni nombre_bd en dbo.pq_empresa del diccionario.");
+        }
+
+        var operativeDatabases = await ListOperativeDatabaseNamesAsync(nombreBdColumn, cancellationToken);
+        if (operativeDatabases.Count == 0)
+        {
+            _logger.LogWarning(
+                "Fase company: no hay bases operativas en pq_empresa.{Column}, omitiendo",
+                nombreBdColumn);
+            return;
+        }
+
+        foreach (var nombreBd in operativeDatabases)
+        {
+            _logger.LogInformation("Aplicando migraciones company en {NombreBD}", nombreBd);
+            await RunMigrationsAsync(companyScripts, nombreBd, cancellationToken);
+        }
+
+        _logger.LogInformation("Migraciones SQL embebidas finalizadas");
+    }
+
+    private async Task RunMigrationsAsync(
+        IReadOnlyList<string> resourceNames,
+        string? databaseOverride,
+        CancellationToken cancellationToken)
+    {
+        if (resourceNames.Count == 0)
+            return;
+
+        await EnsureSchemaAsync(databaseOverride, cancellationToken);
 
         var appliedMigrations = new HashSet<string>(
             await _sqlExecutor.QueryStringColumnAsync(
                 AppliedMigrationsSql,
                 "migration",
                 _settings.CommandTimeoutSeconds,
+                databaseOverride,
                 cancellationToken),
             StringComparer.OrdinalIgnoreCase);
 
-        var embeddedResources = SqlScriptLoader.ListEmbeddedMigrationResourceNames();
         var batch = 1;
         var appliedCount = 0;
         var skippedCount = 0;
 
-        foreach (var resourceName in embeddedResources)
+        foreach (var resourceName in resourceNames)
         {
             var migrationName = SqlScriptLoader.GetMigrationFileName(resourceName);
 
             if (appliedMigrations.Contains(migrationName))
             {
-                _logger.LogDebug("Migracion {Migration} ya aplicada, omitiendo", migrationName);
+                _logger.LogDebug(
+                    "Migracion {Migration} ya aplicada en {Database}, omitiendo",
+                    migrationName,
+                    databaseOverride ?? "diccionario");
                 skippedCount++;
                 continue;
             }
 
-            _logger.LogInformation("Aplicando migracion {Migration}", migrationName);
+            _logger.LogInformation(
+                "Aplicando migracion {Migration} en {Database}",
+                migrationName,
+                databaseOverride ?? "diccionario");
 
             var scriptContent = SqlScriptLoader.ReadEmbeddedMigrationContent(resourceName);
             var checksum = ComputeSha256Hex(scriptContent);
@@ -93,6 +158,7 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                     await _sqlExecutor.ExecuteNonQueryAsync(
                         batchSql,
                         _settings.CommandTimeoutSeconds,
+                        databaseOverride,
                         cancellationToken);
                 }
 
@@ -105,35 +171,82 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                         ["checksum_sha256"] = checksum
                     },
                     _settings.CommandTimeoutSeconds,
+                    databaseOverride,
                     cancellationToken);
 
                 appliedMigrations.Add(migrationName);
                 appliedCount++;
 
                 _logger.LogInformation(
-                    "Migracion {Migration} aplicada correctamente (checksum {Checksum})",
+                    "Migracion {Migration} aplicada correctamente en {Database} (checksum {Checksum})",
                     migrationName,
+                    databaseOverride ?? "diccionario",
                     checksum);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al aplicar migracion {Migration}", migrationName);
+                _logger.LogError(
+                    ex,
+                    "Error al aplicar migracion {Migration} en {Database}",
+                    migrationName,
+                    databaseOverride ?? "diccionario");
                 throw;
             }
         }
 
         _logger.LogInformation(
-            "Migraciones SQL embebidas finalizadas: {Applied} aplicadas, {Skipped} omitidas, {Total} embebidas",
+            "Migraciones en {Database}: {Applied} aplicadas, {Skipped} omitidas, {Total} embebidas",
+            databaseOverride ?? "diccionario",
             appliedCount,
             skippedCount,
-            embeddedResources.Count);
+            resourceNames.Count);
     }
 
-    private async Task EnsureSchemaAsync(CancellationToken cancellationToken)
+    private async Task<string?> ResolveNombreBdColumnAsync(CancellationToken cancellationToken)
+    {
+        var columns = await _sqlExecutor.QueryStringColumnAsync(
+            ResolveNombreBdColumnSql,
+            "COLUMN_NAME",
+            _settings.CommandTimeoutSeconds,
+            databaseOverride: null,
+            cancellationToken);
+
+        return columns.FirstOrDefault(column =>
+            string.Equals(column, "NombreBD", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(column, "nombre_bd", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<IReadOnlyList<string>> ListOperativeDatabaseNamesAsync(
+        string nombreBdColumn,
+        CancellationToken cancellationToken)
+    {
+        var sql = $"""
+            SELECT DISTINCT LTRIM(RTRIM(CAST([{nombreBdColumn}] AS NVARCHAR(256)))) AS NombreBD
+            FROM dbo.pq_empresa
+            WHERE [{nombreBdColumn}] IS NOT NULL
+              AND LTRIM(RTRIM(CAST([{nombreBdColumn}] AS NVARCHAR(256)))) <> N''
+            """;
+
+        var databaseNames = await _sqlExecutor.QueryStringColumnAsync(
+            sql,
+            "NombreBD",
+            _settings.CommandTimeoutSeconds,
+            databaseOverride: null,
+            cancellationToken);
+
+        return databaseNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private async Task EnsureSchemaAsync(string? databaseOverride, CancellationToken cancellationToken)
     {
         await _sqlExecutor.ExecuteNonQueryAsync(
             EnsureSchemaSql,
             _settings.CommandTimeoutSeconds,
+            databaseOverride,
             cancellationToken);
     }
 

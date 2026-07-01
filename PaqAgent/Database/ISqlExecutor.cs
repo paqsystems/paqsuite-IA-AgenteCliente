@@ -42,6 +42,8 @@ public interface ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default);
 
 
@@ -54,6 +56,8 @@ public interface ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default);
 
 
@@ -65,6 +69,8 @@ public interface ISqlExecutor
         string columnName,
 
         int timeoutSeconds,
+
+        string? databaseOverride = null,
 
         CancellationToken cancellationToken = default);
 

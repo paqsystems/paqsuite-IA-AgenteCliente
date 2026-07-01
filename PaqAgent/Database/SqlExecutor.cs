@@ -190,11 +190,13 @@ public class SqlExecutor : ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default)
 
     {
 
-        await ExecuteNonQueryAsync(sql, new Dictionary<string, object?>(), timeoutSeconds, cancellationToken);
+        await ExecuteNonQueryAsync(sql, new Dictionary<string, object?>(), timeoutSeconds, databaseOverride, cancellationToken);
 
     }
 
@@ -208,11 +210,13 @@ public class SqlExecutor : ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default)
 
     {
 
-        await using var connection = new SqlConnection(_settings.BuildConnectionString());
+        await using var connection = new SqlConnection(ResolveConnectionString(databaseOverride));
 
         await connection.OpenAsync(cancellationToken);
 
@@ -256,11 +260,13 @@ public class SqlExecutor : ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default)
 
     {
 
-        await using var connection = new SqlConnection(_settings.BuildConnectionString());
+        await using var connection = new SqlConnection(ResolveConnectionString(databaseOverride));
 
         await connection.OpenAsync(cancellationToken);
 
@@ -305,6 +311,13 @@ public class SqlExecutor : ISqlExecutor
         return values;
 
     }
+
+
+
+    private string ResolveConnectionString(string? databaseOverride) =>
+        string.IsNullOrWhiteSpace(databaseOverride)
+            ? _settings.BuildConnectionString()
+            : _settings.BuildConnectionString(databaseOverride);
 
 
 
