@@ -13,12 +13,14 @@ public class SqlConnectionSettings
     public int ConnectionTimeoutSeconds { get; set; } = 15;
     public int CommandTimeoutSeconds { get; set; } = 30;
 
-    public string BuildConnectionString()
+    public string BuildConnectionString() => BuildConnectionString(Database);
+
+    public string BuildConnectionString(string databaseOverride)
     {
         var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder
         {
             DataSource = Server,
-            InitialCatalog = Database,
+            InitialCatalog = databaseOverride,
             UserID = User,
             Password = Password,
             Encrypt = Encrypt,

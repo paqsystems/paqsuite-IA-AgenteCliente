@@ -13,5 +13,6 @@ public class OperationDefinition
     public string? Description { get; set; }
     public bool Enabled { get; set; } = true;
     public int TimeoutSeconds { get; set; } = 30;
+    public string Connection { get; set; } = "dictionary";
     public List<string> Parameters { get; set; } = new();
 }

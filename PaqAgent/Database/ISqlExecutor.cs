@@ -14,6 +14,8 @@ public interface ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default);
 
 

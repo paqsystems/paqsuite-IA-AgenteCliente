@@ -59,6 +59,7 @@ public class OperationRegistry
                 name,
                 definition.StoredProcedure,
                 definition.Parameters,
+                definition.Connection,
                 _sqlExecutor);
         }
 
@@ -79,8 +80,11 @@ public class OperationNotAllowedException : Exception
 
 internal class StoredProcedureOperation : IOperationHandler
 {
+    private const string DatabaseParameterName = "_database";
+
     private readonly string _storedProcedure;
     private readonly List<string> _allowedParameters;
+    private readonly bool _isDynamic;
     private readonly ISqlExecutor _sqlExecutor;
 
     public string OperationName { get; }
@@ -89,11 +93,13 @@ internal class StoredProcedureOperation : IOperationHandler
         string operationName,
         string storedProcedure,
         List<string> allowedParameters,
+        string connection,
         ISqlExecutor sqlExecutor)
     {
         OperationName = operationName;
         _storedProcedure = storedProcedure;
         _allowedParameters = allowedParameters;
+        _isDynamic = string.Equals(connection, "company", StringComparison.OrdinalIgnoreCase);
         _sqlExecutor = sqlExecutor;
     }
 
@@ -102,8 +108,30 @@ internal class StoredProcedureOperation : IOperationHandler
         int timeoutSeconds,
         CancellationToken cancellationToken)
     {
+        string? databaseOverride = null;
+
+        if (_isDynamic)
+        {
+            if (!parameters.TryGetValue(DatabaseParameterName, out var databaseValue)
+                || databaseValue is null
+                || string.IsNullOrWhiteSpace(databaseValue.ToString()))
+            {
+                throw new InvalidOperationException(
+                    $"La operacion '{OperationName}' requiere el parametro '{DatabaseParameterName}' " +
+                    "con el nombre de la base operativa de la empresa.");
+            }
+
+            databaseOverride = databaseValue.ToString()!.Trim();
+            parameters = new Dictionary<string, object?>(parameters, StringComparer.OrdinalIgnoreCase);
+            parameters.Remove(DatabaseParameterName);
+        }
+
         var mapped = SqlParameterMapper.MapParameters(parameters, _allowedParameters);
         return await _sqlExecutor.ExecuteStoredProcedureAsync(
-            _storedProcedure, mapped, timeoutSeconds, cancellationToken);
+            _storedProcedure,
+            mapped,
+            timeoutSeconds,
+            databaseOverride,
+            cancellationToken);
     }
 }

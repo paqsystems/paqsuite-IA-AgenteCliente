@@ -44,13 +44,15 @@ public class SqlExecutor : ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default)
 
     {
 
-        var resultSets = await ExecuteStoredProcedureMultiResultAsync(
+        var resultSets = await ExecuteStoredProcedureMultiResultInternalAsync(
 
-            storedProcedure, parameters, timeoutSeconds, cancellationToken);
+            storedProcedure, parameters, timeoutSeconds, databaseOverride, cancellationToken);
 
 
 
@@ -76,7 +78,35 @@ public class SqlExecutor : ISqlExecutor
 
     {
 
-        await using var connection = new SqlConnection(_settings.BuildConnectionString());
+        return await ExecuteStoredProcedureMultiResultInternalAsync(
+
+            storedProcedure, parameters, timeoutSeconds, databaseOverride: null, cancellationToken);
+
+    }
+
+
+
+    private async Task<IReadOnlyList<IReadOnlyList<Dictionary<string, object?>>>> ExecuteStoredProcedureMultiResultInternalAsync(
+
+        string storedProcedure,
+
+        Dictionary<string, object?> parameters,
+
+        int timeoutSeconds,
+
+        string? databaseOverride,
+
+        CancellationToken cancellationToken)
+
+    {
+
+        var connectionString = string.IsNullOrWhiteSpace(databaseOverride)
+
+            ? _settings.BuildConnectionString()
+
+            : _settings.BuildConnectionString(databaseOverride);
+
+        await using var connection = new SqlConnection(connectionString);
 
         await connection.OpenAsync(cancellationToken);
 
