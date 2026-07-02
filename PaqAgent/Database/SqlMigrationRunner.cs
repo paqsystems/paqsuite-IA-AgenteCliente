@@ -37,6 +37,15 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         ORDER BY CASE COLUMN_NAME WHEN N'NombreBD' THEN 0 ELSE 1 END
         """;
 
+    private const string ResolveHabilitaColumnSql = """
+        SELECT TOP 1 COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = N'dbo'
+          AND TABLE_NAME = N'pq_empresa'
+          AND COLUMN_NAME IN (N'Habilita', N'habilita')
+        ORDER BY CASE COLUMN_NAME WHEN N'Habilita' THEN 0 ELSE 1 END
+        """;
+
     private readonly ISqlExecutor _sqlExecutor;
     private readonly SqlMigrationSettings _settings;
     private readonly ILogger<SqlMigrationRunner> _logger;
@@ -97,7 +106,18 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         foreach (var nombreBd in operativeDatabases)
         {
             _logger.LogInformation("Aplicando migraciones company en {NombreBD}", nombreBd);
-            await RunMigrationsAsync(companyScripts, nombreBd, cancellationToken);
+            try
+            {
+                await RunMigrationsAsync(companyScripts, nombreBd, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudieron aplicar migraciones company en {NombreBD}: {Message}",
+                    nombreBd,
+                    ex.Message);
+            }
         }
 
         _logger.LogInformation("Migraciones SQL embebidas finalizadas");
@@ -216,15 +236,41 @@ public class SqlMigrationRunner : ISqlMigrationRunner
             || string.Equals(column, "nombre_bd", StringComparison.OrdinalIgnoreCase));
     }
 
+    private async Task<string?> ResolveHabilitaColumnAsync(CancellationToken cancellationToken)
+    {
+        var columns = await _sqlExecutor.QueryStringColumnAsync(
+            ResolveHabilitaColumnSql,
+            "COLUMN_NAME",
+            _settings.CommandTimeoutSeconds,
+            databaseOverride: null,
+            cancellationToken);
+
+        return columns.FirstOrDefault(column =>
+            string.Equals(column, "Habilita", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(column, "habilita", StringComparison.OrdinalIgnoreCase));
+    }
+
     private async Task<IReadOnlyList<string>> ListOperativeDatabaseNamesAsync(
         string nombreBdColumn,
         CancellationToken cancellationToken)
     {
+        var habilitaFilter = string.Empty;
+        var habilitaColumn = await ResolveHabilitaColumnAsync(cancellationToken);
+        if (habilitaColumn is not null)
+        {
+            habilitaFilter = $"\n  AND [{habilitaColumn}] = 1";
+        }
+        else
+        {
+            _logger.LogWarning(
+                "No se encontro columna Habilita/habilita en dbo.pq_empresa; listando todas las bases con NombreBD definido");
+        }
+
         var sql = $"""
             SELECT DISTINCT LTRIM(RTRIM(CAST([{nombreBdColumn}] AS NVARCHAR(256)))) AS NombreBD
             FROM dbo.pq_empresa
             WHERE [{nombreBdColumn}] IS NOT NULL
-              AND LTRIM(RTRIM(CAST([{nombreBdColumn}] AS NVARCHAR(256)))) <> N''
+              AND LTRIM(RTRIM(CAST([{nombreBdColumn}] AS NVARCHAR(256)))) <> N''{habilitaFilter}
             """;
 
         var databaseNames = await _sqlExecutor.QueryStringColumnAsync(
