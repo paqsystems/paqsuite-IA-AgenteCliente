@@ -10,17 +10,20 @@ public class AgentHub : Hub
     private readonly IAgentConnectionRegistry _registry;
     private readonly IJobCorrelationService _jobCorrelation;
     private readonly IAgentTokenValidator _tokenValidator;
+    private readonly ILaravelAgentAuthService _laravelAuthService;
     private readonly ILogger<AgentHub> _logger;
 
     public AgentHub(
         IAgentConnectionRegistry registry,
         IJobCorrelationService jobCorrelation,
         IAgentTokenValidator tokenValidator,
+        ILaravelAgentAuthService laravelAuthService,
         ILogger<AgentHub> logger)
     {
         _registry = registry;
         _jobCorrelation = jobCorrelation;
         _tokenValidator = tokenValidator;
+        _laravelAuthService = laravelAuthService;
         _logger = logger;
     }
 
@@ -31,6 +34,7 @@ public class AgentHub : Hub
 
         var agentId = AgentConnectionAuth.ExtractHeader(httpContext, AgentConnectionAuth.AgentIdHeader);
         var clientId = AgentConnectionAuth.ExtractHeader(httpContext, AgentConnectionAuth.ClientIdHeader);
+        var agentVersion = AgentConnectionAuth.ExtractHeader(httpContext, AgentConnectionAuth.AgentVersionHeader);
         var token = AgentConnectionAuth.ExtractToken(httpContext);
 
         if (!_tokenValidator.TryValidate(agentId ?? string.Empty, clientId ?? string.Empty, token ?? string.Empty, out var reason))
@@ -41,6 +45,10 @@ public class AgentHub : Hub
                 reason);
             throw new HubException(reason ?? "Autenticacion de agente fallida");
         }
+
+        _ = _laravelAuthService.UpdateHeartbeatAsync(
+            agentId ?? string.Empty,
+            agentVersion ?? "unknown");
 
         _registry.RegisterConnection(Context.ConnectionId, () => Context.Abort());
 

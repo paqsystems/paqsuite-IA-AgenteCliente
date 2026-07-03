@@ -8,11 +8,11 @@ public interface IAgentTokenValidator
     bool TryValidate(string agentId, string clientId, string token, out string? failureReason);
 }
 
-public class AgentTokenValidator : IAgentTokenValidator
+public class StaticAgentTokenValidator : IAgentTokenValidator
 {
     private readonly GatewaySettings _settings;
 
-    public AgentTokenValidator(IOptions<GatewaySettings> settings)
+    public StaticAgentTokenValidator(IOptions<GatewaySettings> settings)
     {
         _settings = settings.Value;
     }
@@ -70,10 +70,62 @@ public class AgentTokenValidator : IAgentTokenValidator
     }
 }
 
+public class LaravelBackedAgentTokenValidator : IAgentTokenValidator
+{
+    private readonly ILaravelAgentAuthService _laravelAuth;
+
+    public LaravelBackedAgentTokenValidator(ILaravelAgentAuthService laravelAuth)
+    {
+        _laravelAuth = laravelAuth;
+    }
+
+    public bool TryValidate(string agentId, string clientId, string token, out string? failureReason)
+    {
+        failureReason = null;
+
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            failureReason = "X-Agent-Id requerido";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            failureReason = "X-Client-Id requerido";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            failureReason = "Token de agente requerido";
+            return false;
+        }
+
+        var result = _laravelAuth.AuthenticateAsync(agentId, clientId, token)
+            .GetAwaiter()
+            .GetResult();
+
+        if (!result.Valid)
+        {
+            failureReason = result.Reason ?? "Token invalido";
+            return false;
+        }
+
+        if (!result.Enabled)
+        {
+            failureReason = result.Reason ?? "Agente deshabilitado";
+            return false;
+        }
+
+        return true;
+    }
+}
+
 public static class AgentConnectionAuth
 {
     public const string AgentIdHeader = "X-Agent-Id";
     public const string ClientIdHeader = "X-Client-Id";
+    public const string AgentVersionHeader = "X-Agent-Version";
 
     public static string? ExtractToken(HttpContext httpContext)
     {
