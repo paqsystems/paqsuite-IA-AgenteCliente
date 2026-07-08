@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PaqAgent.Configuration;
 using PaqAgent.Database;
@@ -8,12 +9,17 @@ public class OperationRegistry
 {
     private readonly OperationSettings _settings;
     private readonly ISqlExecutor _sqlExecutor;
-    private readonly Dictionary<string, StoredProcedureOperation> _handlers;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly Dictionary<string, IOperationHandler> _handlers;
 
-    public OperationRegistry(IOptions<OperationSettings> settings, ISqlExecutor sqlExecutor)
+    public OperationRegistry(
+        IOptions<OperationSettings> settings,
+        ISqlExecutor sqlExecutor,
+        ILoggerFactory loggerFactory)
     {
         _settings = settings.Value;
         _sqlExecutor = sqlExecutor;
+        _loggerFactory = loggerFactory;
         _handlers = BuildHandlers();
     }
 
@@ -43,9 +49,9 @@ public class OperationRegistry
         return await handler.ExecuteAsync(parameters, timeoutSeconds, cancellationToken);
     }
 
-    private Dictionary<string, StoredProcedureOperation> BuildHandlers()
+    private Dictionary<string, IOperationHandler> BuildHandlers()
     {
-        var handlers = new Dictionary<string, StoredProcedureOperation>(StringComparer.OrdinalIgnoreCase);
+        var handlers = new Dictionary<string, IOperationHandler>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (name, definition) in _settings.Definitions)
         {
@@ -54,6 +60,17 @@ public class OperationRegistry
 
             if (string.IsNullOrWhiteSpace(definition.StoredProcedure))
                 continue;
+
+            if (string.Equals(name, RobinetDeudasOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new RobinetDeudasOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<RobinetDeudasOperation>());
+                continue;
+            }
 
             handlers[name] = new StoredProcedureOperation(
                 name,

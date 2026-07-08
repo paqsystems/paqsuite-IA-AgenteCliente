@@ -74,13 +74,15 @@ public class SqlExecutor : ISqlExecutor
 
         int timeoutSeconds,
 
+        string? databaseOverride = null,
+
         CancellationToken cancellationToken = default)
 
     {
 
         return await ExecuteStoredProcedureMultiResultInternalAsync(
 
-            storedProcedure, parameters, timeoutSeconds, databaseOverride: null, cancellationToken);
+            storedProcedure, parameters, timeoutSeconds, databaseOverride, cancellationToken);
 
     }
 
