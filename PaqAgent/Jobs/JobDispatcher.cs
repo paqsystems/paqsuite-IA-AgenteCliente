@@ -74,6 +74,20 @@ public class JobDispatcher
 
 
 
+    private void LogBeforeGatewaySend(string jobId)
+
+    {
+
+        _logger.LogInformation(
+
+            "[PERF {TimestampUtc}] Antes de enviar resultado al Gateway JobId={JobId}",
+
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), jobId);
+
+    }
+
+
+
     public async Task<AgentJobResult> DispatchAsync(AgentJob job, CancellationToken cancellationToken = default)
 
     {
@@ -94,6 +108,14 @@ public class JobDispatcher
 
 
 
+        _logger.LogInformation(
+
+            "[PERF {TimestampUtc}] Job recibido JobId={JobId} Operation={Operation}",
+
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
         try
 
         {
@@ -101,6 +123,8 @@ public class JobDispatcher
             if (!_authenticator.ValidateJob(job))
 
             {
+
+                LogBeforeGatewaySend(job.JobId);
 
                 return JobResultFactory.Failed(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds,
 
@@ -118,9 +142,19 @@ public class JobDispatcher
 
             {
 
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Antes de buscar handler JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
                 if (!_operationRegistry.IsAllowed(job.Operation))
 
                 {
+
+                    LogBeforeGatewaySend(job.JobId);
 
                     return JobResultFactory.Failed(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds,
 
@@ -132,15 +166,39 @@ public class JobDispatcher
 
 
 
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Handler encontrado JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
                 using var loginCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
                 loginCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
 
 
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Antes de ExecuteAsync JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
                 var loginResult = await _authLoginOperation.ExecuteAsync(
 
                     job.Parameters, timeoutSeconds, loginCts.Token);
+
+
+
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Después de ExecuteAsync JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
 
 
 
@@ -161,6 +219,8 @@ public class JobDispatcher
                         loginResult.ErrorCode);
 
 
+
+                    LogBeforeGatewaySend(job.JobId);
 
                     return JobResultFactory.Failed(
 
@@ -188,6 +248,8 @@ public class JobDispatcher
 
 
 
+                LogBeforeGatewaySend(job.JobId);
+
                 return JobResultFactory.Success(
 
                     job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds, loginResult.Data);
@@ -200,7 +262,23 @@ public class JobDispatcher
 
             {
 
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Antes de ExecuteAsync JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
                 data = await _diagnosticsService.RunDiagnosticsAsync(cancellationToken);
+
+
+
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Después de ExecuteAsync JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
 
             }
 
@@ -208,9 +286,19 @@ public class JobDispatcher
 
             {
 
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Antes de buscar handler JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
                 if (!_operationRegistry.IsAllowed(job.Operation))
 
                 {
+
+                    LogBeforeGatewaySend(job.JobId);
 
                     return JobResultFactory.Failed(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds,
 
@@ -222,15 +310,39 @@ public class JobDispatcher
 
 
 
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Handler encontrado JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
                 cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
 
 
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Antes de ExecuteAsync JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+
+
+
                 data = await _operationRegistry.ExecuteAsync(
 
                     job.Operation, job.Parameters, timeoutSeconds, cts.Token);
+
+
+
+                _logger.LogInformation(
+
+                    "[PERF {TimestampUtc}] Después de ExecuteAsync JobId={JobId} Operation={Operation}",
+
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
 
             }
 
@@ -241,6 +353,8 @@ public class JobDispatcher
             _logger.LogInformation("Job {JobId} completado en {DurationMs}ms", job.JobId, stopwatch.ElapsedMilliseconds);
 
 
+
+            LogBeforeGatewaySend(job.JobId);
 
             return JobResultFactory.Success(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds, data);
 
@@ -254,6 +368,8 @@ public class JobDispatcher
 
             _logger.LogWarning("Job {JobId} excedio el timeout de {Timeout}s", job.JobId, timeoutSeconds);
 
+            LogBeforeGatewaySend(job.JobId);
+
             return JobResultFactory.Timeout(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds);
 
         }
@@ -263,6 +379,8 @@ public class JobDispatcher
         {
 
             stopwatch.Stop();
+
+            LogBeforeGatewaySend(job.JobId);
 
             return JobResultFactory.Failed(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds,
 
@@ -278,6 +396,8 @@ public class JobDispatcher
 
             _logger.LogError(ex, "Timeout SQL en job {JobId}", job.JobId);
 
+            LogBeforeGatewaySend(job.JobId);
+
             return JobResultFactory.Failed(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds,
 
                 ErrorCodes.SqlTimeout, "La consulta supero el tiempo maximo permitido.");
@@ -292,6 +412,8 @@ public class JobDispatcher
 
             _logger.LogError(ex, "Error SQL en job {JobId}", job.JobId);
 
+            LogBeforeGatewaySend(job.JobId);
+
             return JobResultFactory.Failed(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds,
 
                 ErrorCodes.SqlError, ex.Message);
@@ -305,6 +427,8 @@ public class JobDispatcher
             stopwatch.Stop();
 
             _logger.LogError(ex, "Error interno en job {JobId}", job.JobId);
+
+            LogBeforeGatewaySend(job.JobId);
 
             return JobResultFactory.Failed(job.JobId, _settings.AgentId, stopwatch.ElapsedMilliseconds,
 

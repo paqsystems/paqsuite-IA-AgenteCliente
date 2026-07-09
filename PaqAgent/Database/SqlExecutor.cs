@@ -108,21 +108,41 @@ public class SqlExecutor : ISqlExecutor
 
             : _settings.BuildConnectionString(databaseOverride);
 
+        _logger.LogInformation(
+            "[PERF {TimestampUtc}] Antes de abrir SqlConnection SP={StoredProcedure}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), storedProcedure);
+
         await using var connection = new SqlConnection(connectionString);
 
         await connection.OpenAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "[PERF {TimestampUtc}] Después de abrir SqlConnection SP={StoredProcedure}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), storedProcedure);
 
 
 
         await using var command = BuildCommand(storedProcedure, parameters, timeoutSeconds, connection);
 
+        _logger.LogInformation(
+            "[PERF {TimestampUtc}] Antes de ExecuteStoredProcedure SP={StoredProcedure}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), storedProcedure);
+
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "[PERF {TimestampUtc}] Después de ExecuteStoredProcedure SP={StoredProcedure}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), storedProcedure);
 
 
 
         var allResultSets = new List<IReadOnlyList<Dictionary<string, object?>>>();
 
 
+
+        _logger.LogInformation(
+            "[PERF {TimestampUtc}] Antes de leer ResultSet SP={StoredProcedure}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), storedProcedure);
 
         do
 
@@ -133,6 +153,10 @@ public class SqlExecutor : ISqlExecutor
         }
 
         while (await reader.NextResultAsync(cancellationToken));
+
+        _logger.LogInformation(
+            "[PERF {TimestampUtc}] Después de leer ResultSet SP={StoredProcedure}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), storedProcedure);
 
 
 

@@ -126,6 +126,12 @@ public class AgentHub : Hub
 
     public Task SendJobResult(AgentJobResult result)
     {
+        _logger.LogInformation(
+            "[PERF-DIAG] {Timestamp} | SendJobResult recibido | jobId={JobId} | agentId={AgentId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+            result.JobId,
+            result.AgentId);
+
         if (string.IsNullOrWhiteSpace(result.JobId))
             throw new HubException("JobId requerido en SendJobResult");
 

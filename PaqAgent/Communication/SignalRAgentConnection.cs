@@ -94,6 +94,10 @@ public class SignalRAgentConnection : IAgentConnection, IAsyncDisposable
             throw new InvalidOperationException("No hay conexion activa con el gateway");
 
         await _connection.InvokeAsync("SendJobResult", result, cancellationToken);
+
+        _logger.LogInformation(
+            "[PERF {TimestampUtc}] Después de enviar resultado al Gateway JobId={JobId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"), result.JobId);
     }
 
     private HubConnection BuildConnection()
@@ -127,10 +131,20 @@ public class SignalRAgentConnection : IAgentConnection, IAsyncDisposable
                     return;
                 }
 
-                _logger.LogInformation("Job recibido: {JobId}, operacion: {Operation}", job.JobId, job.Operation);
+                _logger.LogInformation(
+                    "[PERF {TimestampUtc}] ExecuteJob recibido JobId={JobId} Operation={Operation}",
+                    DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
 
                 if (OnJobReceived is not null)
+                {
+                    _logger.LogInformation(
+                        "[PERF {TimestampUtc}] Antes de OnJobReceived JobId={JobId} Operation={Operation}",
+                        DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
                     await OnJobReceived.Invoke(job);
+                    _logger.LogInformation(
+                        "[PERF {TimestampUtc}] Después de OnJobReceived JobId={JobId} Operation={Operation}",
+                        DateTime.UtcNow.ToString("HH:mm:ss.fff"), job.JobId, job.Operation);
+                }
             }
             catch (Exception ex)
             {

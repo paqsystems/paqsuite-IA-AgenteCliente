@@ -60,6 +60,7 @@ public class AuthLoginOperation
             definition.StoredProcedure,
             mapped,
             effectiveTimeout,
+            databaseOverride: null,
             cancellationToken);
 
         if (resultSets.Count == 0 || resultSets[0].Count == 0)

@@ -53,9 +53,22 @@ public class InternalJobsController : ControllerBase
             return BadRequest(new { error = "operation es requerida" });
 
         var jobId = Guid.NewGuid().ToString("N");
+
+        _logger.LogInformation(
+            "[PERF-DIAG] {Timestamp} | SendJob paso=1 HTTP Request recibida | jobId={JobId} | agentId={AgentId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+            jobId,
+            request.AgentId);
+
         var timeoutSeconds = request.TimeoutSeconds is > 0
             ? request.TimeoutSeconds.Value
             : _settings.DefaultJobTimeoutSeconds;
+
+        _logger.LogInformation(
+            "[PERF-DIAG] {Timestamp} | SendJob paso=2 Antes de buscar agente | jobId={JobId} | agentId={AgentId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+            jobId,
+            request.AgentId);
 
         if (!_registry.TryGetConnectionId(request.AgentId, out var connectionId)
             || string.IsNullOrWhiteSpace(connectionId))
@@ -65,6 +78,12 @@ public class InternalJobsController : ControllerBase
                 jobId,
                 request.AgentId,
                 request.Operation);
+
+            _logger.LogInformation(
+                "[PERF-DIAG] {Timestamp} | SendJob paso=10 Antes de responder a Laravel | jobId={JobId} | agentId={AgentId}",
+                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+                jobId,
+                request.AgentId);
 
             return Ok(new GatewayJobResponse
             {
@@ -79,6 +98,13 @@ public class InternalJobsController : ControllerBase
             });
         }
 
+        _logger.LogInformation(
+            "[PERF-DIAG] {Timestamp} | SendJob paso=3 Agente encontrado | jobId={JobId} | agentId={AgentId} | connectionId={ConnectionId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+            jobId,
+            request.AgentId,
+            connectionId);
+
         var job = new AgentJob
         {
             JobId = jobId,
@@ -90,7 +116,19 @@ public class InternalJobsController : ControllerBase
             RequestedAtUtc = DateTime.UtcNow
         };
 
+        _logger.LogInformation(
+            "[PERF-DIAG] {Timestamp} | SendJob paso=4 Antes de serializar Job | jobId={JobId} | agentId={AgentId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+            jobId,
+            request.AgentId);
+
         var jobJson = JsonSerializer.Serialize(job, JobJsonOptions);
+
+        _logger.LogInformation(
+            "[PERF-DIAG] {Timestamp} | SendJob paso=5 Después de serializar Job | jobId={JobId} | agentId={AgentId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+            jobId,
+            request.AgentId);
 
         _logger.LogInformation(
             "Enviando job al agente: jobId={JobId}, agentId={AgentId}, operation={Operation}",
@@ -105,9 +143,40 @@ public class InternalJobsController : ControllerBase
 
         try
         {
+            _logger.LogInformation(
+                "[PERF-DIAG] {Timestamp} | SendJob paso=6 Antes de SendAsync | jobId={JobId} | agentId={AgentId}",
+                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+                jobId,
+                request.AgentId);
+
             await _hubContext.Clients.Client(connectionId).SendAsync("ExecuteJob", jobJson, cancellationToken);
 
+            _logger.LogInformation(
+                "[PERF-DIAG] {Timestamp} | SendJob paso=7 Después de SendAsync | jobId={JobId} | agentId={AgentId}",
+                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+                jobId,
+                request.AgentId);
+
+            _logger.LogInformation(
+                "[PERF-DIAG] {Timestamp} | SendJob paso=8 Antes de esperar WaitForResultAsync | jobId={JobId} | agentId={AgentId}",
+                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+                jobId,
+                request.AgentId);
+
             var result = await waitTask;
+
+            _logger.LogInformation(
+                "[PERF-DIAG] {Timestamp} | SendJob paso=9 WaitForResultAsync devolvió resultado | jobId={JobId} | agentId={AgentId}",
+                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+                jobId,
+                request.AgentId);
+
+            _logger.LogInformation(
+                "[PERF-DIAG] {Timestamp} | SendJob paso=10 Antes de responder a Laravel | jobId={JobId} | agentId={AgentId}",
+                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+                jobId,
+                request.AgentId);
+
             return Ok(MapToGatewayResponse(result));
         }
         catch (TimeoutException)
@@ -119,6 +188,12 @@ public class InternalJobsController : ControllerBase
                 jobId,
                 request.AgentId,
                 request.Operation);
+
+            _logger.LogInformation(
+                "[PERF-DIAG] {Timestamp} | SendJob paso=10 Antes de responder a Laravel | jobId={JobId} | agentId={AgentId}",
+                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+                jobId,
+                request.AgentId);
 
             return Ok(new GatewayJobResponse
             {

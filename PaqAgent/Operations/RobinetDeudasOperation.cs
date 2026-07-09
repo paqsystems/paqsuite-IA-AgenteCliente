@@ -58,9 +58,9 @@ internal class RobinetDeudasOperation : IOperationHandler
 
         var spParams = new Dictionary<string, object?>
         {
-            ["cod_client"] = parameters.GetValueOrDefault("cod_client"),
-            ["prefijo_acopio"] = parameters.GetValueOrDefault("prefijo_acopio"),
-            ["empresa"] = parameters.GetValueOrDefault("empresa"),
+            ["cod_client"] = GetString(parameters, "cod_client"),
+            ["prefijo_acopio"] = GetString(parameters, "prefijo_acopio"),
+            ["empresa"] = GetString(parameters, "empresa"),
             ["page"] = page,
             ["page_size"] = pageSize,
         };
@@ -114,5 +114,20 @@ internal class RobinetDeudasOperation : IOperationHandler
         }
 
         return Convert.ToInt32(value);
+    }
+
+    private static string? GetString(IReadOnlyDictionary<string, object?> parameters, string key)
+    {
+        if (!parameters.TryGetValue(key, out var value) || value is null)
+            return null;
+
+        if (value is JsonElement element)
+        {
+            return element.ValueKind == JsonValueKind.String
+                ? element.GetString()
+                : element.ToString();
+        }
+
+        return value.ToString();
     }
 }
