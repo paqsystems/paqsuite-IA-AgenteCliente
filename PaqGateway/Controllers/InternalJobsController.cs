@@ -136,6 +136,12 @@ public class InternalJobsController : ControllerBase
             request.AgentId,
             request.Operation);
 
+        _logger.LogInformation(
+            "[PERF-DIAG] {Timestamp} | SendJob paso=8 Antes de esperar WaitForResultAsync | jobId={JobId} | agentId={AgentId}",
+            DateTime.UtcNow.ToString("HH:mm:ss.fff"),
+            jobId,
+            request.AgentId);
+
         var waitTask = _jobCorrelation.WaitForResultAsync(
             jobId,
             TimeSpan.FromSeconds(timeoutSeconds),
@@ -144,32 +150,29 @@ public class InternalJobsController : ControllerBase
         try
         {
             _logger.LogInformation(
-                "[PERF-DIAG] {Timestamp} | SendJob paso=6 Antes de SendAsync | jobId={JobId} | agentId={AgentId}",
+                "[PERF-DIAG] {Timestamp} | SendJob paso=6 Antes de SendAsync | jobId={JobId} | agentId={AgentId} | connectionId={ConnectionId}",
                 DateTime.UtcNow.ToString("HH:mm:ss.fff"),
                 jobId,
-                request.AgentId);
+                request.AgentId,
+                connectionId);
 
             await _hubContext.Clients.Client(connectionId).SendAsync("ExecuteJob", jobJson, cancellationToken);
 
             _logger.LogInformation(
-                "[PERF-DIAG] {Timestamp} | SendJob paso=7 Después de SendAsync | jobId={JobId} | agentId={AgentId}",
+                "[PERF-DIAG] {Timestamp} | SendJob paso=7 Después de SendAsync | jobId={JobId} | agentId={AgentId} | connectionId={ConnectionId}",
                 DateTime.UtcNow.ToString("HH:mm:ss.fff"),
                 jobId,
-                request.AgentId);
-
-            _logger.LogInformation(
-                "[PERF-DIAG] {Timestamp} | SendJob paso=8 Antes de esperar WaitForResultAsync | jobId={JobId} | agentId={AgentId}",
-                DateTime.UtcNow.ToString("HH:mm:ss.fff"),
-                jobId,
-                request.AgentId);
+                request.AgentId,
+                connectionId);
 
             var result = await waitTask;
 
             _logger.LogInformation(
-                "[PERF-DIAG] {Timestamp} | SendJob paso=9 WaitForResultAsync devolvió resultado | jobId={JobId} | agentId={AgentId}",
+                "[PERF-DIAG] {Timestamp} | SendJob paso=9 WaitForResultAsync devolvió resultado | jobId={JobId} | agentId={AgentId} | status={Status}",
                 DateTime.UtcNow.ToString("HH:mm:ss.fff"),
                 jobId,
-                request.AgentId);
+                request.AgentId,
+                result.Status);
 
             _logger.LogInformation(
                 "[PERF-DIAG] {Timestamp} | SendJob paso=10 Antes de responder a Laravel | jobId={JobId} | agentId={AgentId}",
