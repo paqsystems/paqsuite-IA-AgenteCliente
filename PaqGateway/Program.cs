@@ -23,7 +23,10 @@ builder.Services.AddSingleton<IJobCorrelationService, JobCorrelationService>();
 builder.Services.AddSingleton<ILaravelAgentAuthService, LaravelAgentAuthService>();
 builder.Services.AddSingleton<IAgentTokenValidator, LaravelBackedAgentTokenValidator>();
 
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+});
 builder.Services.AddControllers();
 
 var app = builder.Build();
