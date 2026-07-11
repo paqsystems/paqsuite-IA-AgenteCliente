@@ -61,6 +61,16 @@ public class OperationRegistry
             if (string.IsNullOrWhiteSpace(definition.StoredProcedure))
                 continue;
 
+            if (string.Equals(name, AuthSessionOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AuthSessionOperation(
+                    name,
+                    definition.StoredProcedure,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AuthSessionOperation>());
+                continue;
+            }
+
             if (string.Equals(name, RobinetDeudasOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
             {
                 handlers[name] = new RobinetDeudasOperation(
