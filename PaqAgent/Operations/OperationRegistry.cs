@@ -82,6 +82,28 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, RobinetPedidosOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new RobinetPedidosOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<RobinetPedidosOperation>());
+                continue;
+            }
+
+            if (string.Equals(name, RobinetCobranzasOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new RobinetCobranzasOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<RobinetCobranzasOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
