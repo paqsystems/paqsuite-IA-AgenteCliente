@@ -6,6 +6,8 @@ public class LaravelApiSettings
 
     public string BaseUrl { get; set; } = string.Empty;
 
+    public string InternalUrl { get; set; } = "";
+
     public string InternalApiKey { get; set; } = string.Empty;
 
     public int AuthCacheTtlSeconds { get; set; } = 300;

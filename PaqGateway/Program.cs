@@ -14,7 +14,10 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient(LaravelAgentAuthService.HttpClientName, (sp, client) =>
 {
     var settings = sp.GetRequiredService<IOptions<LaravelApiSettings>>().Value;
-    client.BaseAddress = new Uri(settings.BaseUrl);
+    client.BaseAddress = new Uri(
+        !string.IsNullOrWhiteSpace(settings.InternalUrl)
+            ? settings.InternalUrl
+            : settings.BaseUrl);
     client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
 });
 
