@@ -8,6 +8,8 @@ public class LaravelApiSettings
 
     public string InternalUrl { get; set; } = "";
 
+    public bool InternalSkipTlsValidation { get; set; } = false;
+
     public string InternalApiKey { get; set; } = string.Empty;
 
     public int AuthCacheTtlSeconds { get; set; } = 300;

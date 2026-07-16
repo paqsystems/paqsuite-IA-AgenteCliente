@@ -26,6 +26,17 @@ builder.Services.AddHttpClient(LaravelAgentAuthService.HttpClientName, (sp, clie
         client.DefaultRequestHeaders.Host = new Uri(settings.BaseUrl).Host;
     }
     client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
+})
+.ConfigurePrimaryHttpMessageHandler(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<LaravelApiSettings>>().Value;
+    var handler = new HttpClientHandler();
+    if (settings.InternalSkipTlsValidation)
+    {
+        handler.ServerCertificateCustomValidationCallback =
+            (message, cert, chain, sslPolicyErrors) => true;
+    }
+    return handler;
 });
 
 builder.Services.AddSingleton<IAgentConnectionRegistry, AgentConnectionRegistry>();
