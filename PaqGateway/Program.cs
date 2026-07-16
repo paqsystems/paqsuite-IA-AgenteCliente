@@ -18,6 +18,13 @@ builder.Services.AddHttpClient(LaravelAgentAuthService.HttpClientName, (sp, clie
         !string.IsNullOrWhiteSpace(settings.InternalUrl)
             ? settings.InternalUrl
             : settings.BaseUrl);
+    // Cuando InternalUrl usa IP (ruta Tailscale), nginx del host Laravel necesita
+    // el Host header para enrutar al vhost correcto entre varios sitios hospedados.
+    if (!string.IsNullOrWhiteSpace(settings.InternalUrl) &&
+        !string.IsNullOrWhiteSpace(settings.BaseUrl))
+    {
+        client.DefaultRequestHeaders.Host = new Uri(settings.BaseUrl).Host;
+    }
     client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
 });
 
