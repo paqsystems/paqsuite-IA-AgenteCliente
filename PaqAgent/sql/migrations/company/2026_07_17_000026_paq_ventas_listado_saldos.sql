@@ -1,5 +1,5 @@
 CREATE OR ALTER PROCEDURE dbo.PAQ_Ventas_ListadoSaldos
-    @fecha_referencia   DATETIME,
+    @fecha_referencia   NVARCHAR(10),
     @ignorar_saldo_cero BIT           = 0,
     @cod_client         NVARCHAR(20)  = NULL,
     @vendedor           NVARCHAR(20)  = NULL,
@@ -77,7 +77,7 @@ BEGIN
 
     -- WHERE dinámico
     DECLARE @where NVARCHAR(2000) =
-        N'g12.FECHA_EMIS <= @p_fr
+        N'g12.FECHA_EMIS <= CONVERT(DATETIME, @p_fr, 120)
           AND g12.COD_CLIENT <> ''***''
           AND g12.T_COMP <> ''ANU''
           AND (g12.ESTADO IS NULL OR UPPER(LTRIM(RTRIM(g12.ESTADO))) NOT IN (''ANU'',''ANUL''))';
@@ -124,7 +124,7 @@ BEGIN
         FROM (' + @grouped + N') sub';
 
     EXEC sp_executesql @sqlTotal,
-        N'@p_fr DATETIME, @p_cc NVARCHAR(20), @p_ve NVARCHAR(20),
+        N'@p_fr NVARCHAR(10), @p_cc NVARCHAR(20), @p_ve NVARCHAR(20),
           @p_zo NVARCHAR(20), @p_ru NVARCHAR(20), @p_pr NVARCHAR(20),
           @p_emp NVARCHAR(100)',
         @p_fr=@fecha_referencia, @p_cc=@cod_client, @p_ve=@vendedor,
@@ -142,7 +142,7 @@ BEGIN
         OFFSET @p_offset ROWS FETCH NEXT @p_page_size ROWS ONLY';
 
     EXEC sp_executesql @sqlPaged,
-        N'@p_fr DATETIME, @p_cc NVARCHAR(20), @p_ve NVARCHAR(20),
+        N'@p_fr NVARCHAR(10), @p_cc NVARCHAR(20), @p_ve NVARCHAR(20),
           @p_zo NVARCHAR(20), @p_ru NVARCHAR(20), @p_pr NVARCHAR(20),
           @p_emp NVARCHAR(100), @p_offset INT, @p_page_size INT',
         @p_fr=@fecha_referencia, @p_cc=@cod_client, @p_ve=@vendedor,
