@@ -165,10 +165,20 @@ public class SignalRAgentConnection : IAgentConnection, IAsyncDisposable
             return Task.CompletedTask;
         };
 
-        _connection.Reconnected += connectionId =>
+        _connection.Reconnected += async connectionId =>
         {
             _logger.LogInformation("Reconectado al gateway, connectionId: {ConnectionId}", connectionId);
-            return Task.CompletedTask;
+            try
+            {
+                var identity = _authenticator.BuildIdentity();
+                await _connection.InvokeAsync("RegisterAgent", identity);
+                _logger.LogInformation("Re-registrado como agente {AgentId} tras reconexión",
+                    _settings.AgentId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al re-registrar agente tras reconexión");
+            }
         };
 
         _connection.Closed += async error =>
