@@ -47,6 +47,8 @@ builder.Services.AddSingleton<IAgentTokenValidator, LaravelBackedAgentTokenValid
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(90);
 });
 builder.Services.AddControllers();
 
