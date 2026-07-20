@@ -64,11 +64,17 @@ BEGIN
         ELSE N''
     END;
     SET @dhExpr = @hasDhExpr;
-    SET @saldoCase = N'CASE
-        WHEN g12.T_COMP = ''REC'' THEN -(' + @importeExpr + N')
-        WHEN ' + @dhExpr + N' = ''D'' THEN (' + @importeExpr + N')
-        ELSE -(' + @importeExpr + N')
-    END';
+    IF @dhExpr = N'NULL'
+        SET @saldoCase = N'CASE
+            WHEN g12.T_COMP = ''REC'' THEN -(' + @importeExpr + N')
+            ELSE -(' + @importeExpr + N')
+        END';
+    ELSE
+        SET @saldoCase = N'CASE
+            WHEN g12.T_COMP = ''REC'' THEN -(' + @importeExpr + N')
+            WHEN ' + @dhExpr + N' = ''D'' THEN (' + @importeExpr + N')
+            ELSE -(' + @importeExpr + N')
+        END';
     SET @provCol = CASE
         WHEN @hasCodProvin=1  THEN N'cl.COD_PROVIN'
         WHEN @hasCodProvEnt=1 THEN N'cl.COD_PROVINCIA_ENTREGA'
