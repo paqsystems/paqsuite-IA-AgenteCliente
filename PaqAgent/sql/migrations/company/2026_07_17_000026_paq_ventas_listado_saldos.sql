@@ -52,7 +52,7 @@ BEGIN
     DECLARE @importeExpr NVARCHAR(50),
             @joinGva15   NVARCHAR(200),
             @dhExpr      NVARCHAR(100),
-            @saldoCase   NVARCHAR(500),
+            @saldoCase   NVARCHAR(MAX),
             @provCol     NVARCHAR(50);
 
     SET @importeExpr = CASE WHEN @hasImporteTot=1 THEN N'g12.IMPORTE_TOT' ELSE N'g12.IMPORTE' END;
@@ -101,7 +101,7 @@ BEGIN
     IF @provincia IS NOT NULL AND @provincia <> N'' AND @provCol IS NOT NULL
         SET @where += N' AND ' + @provCol + N'=@p_pr';
 
-    DECLARE @having NVARCHAR(100) = CASE
+    DECLARE @having NVARCHAR(MAX) = CASE
         WHEN @ignorar_saldo_cero=1
         THEN N'HAVING ABS(SUM(' + @saldoCase + N')) > 0.0001'
         ELSE N''
