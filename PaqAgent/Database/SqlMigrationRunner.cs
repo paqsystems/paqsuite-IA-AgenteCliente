@@ -21,11 +21,18 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         END
         """;
 
-    private const string AppliedMigrationsSql = "SELECT migration FROM dbo.paq_sp_migrations";
+    private const string AppliedMigrationsSql =
+        "SELECT migration + N'|' + ISNULL(checksum_sha256, N'') AS migration FROM dbo.paq_sp_migrations";
 
     private const string InsertMigrationSql = """
         INSERT INTO dbo.paq_sp_migrations (migration, batch, checksum_sha256)
         VALUES (@migration, @batch, @checksum_sha256)
+        """;
+
+    private const string UpdateMigrationSql = """
+        UPDATE dbo.paq_sp_migrations
+        SET checksum_sha256 = @checksum, applied_at = SYSUTCDATETIME()
+        WHERE migration = @migration
         """;
 
     private const string ResolveNombreBdColumnSql = """
@@ -133,14 +140,7 @@ public class SqlMigrationRunner : ISqlMigrationRunner
 
         await EnsureSchemaAsync(databaseOverride, cancellationToken);
 
-        var appliedMigrations = new HashSet<string>(
-            await _sqlExecutor.QueryStringColumnAsync(
-                AppliedMigrationsSql,
-                "migration",
-                _settings.CommandTimeoutSeconds,
-                databaseOverride,
-                cancellationToken),
-            StringComparer.OrdinalIgnoreCase);
+        var appliedMigrations = await LoadAppliedMigrationsAsync(databaseOverride, cancellationToken);
 
         var batch = 1;
         var appliedCount = 0;
@@ -149,8 +149,11 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         foreach (var resourceName in resourceNames)
         {
             var migrationName = SqlScriptLoader.GetMigrationFileName(resourceName);
+            var scriptContent = SqlScriptLoader.ReadEmbeddedMigrationContent(resourceName);
+            var checksum = ComputeSha256Hex(scriptContent);
 
-            if (appliedMigrations.Contains(migrationName))
+            if (appliedMigrations.TryGetValue(migrationName, out var storedChecksum)
+                && string.Equals(storedChecksum, checksum, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogDebug(
                     "Migracion {Migration} ya aplicada en {Database}, omitiendo",
@@ -160,13 +163,14 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                 continue;
             }
 
+            var isReapply = appliedMigrations.ContainsKey(migrationName);
+
             _logger.LogInformation(
-                "Aplicando migracion {Migration} en {Database}",
+                isReapply
+                    ? "Re-aplicando migracion {Migration} en {Database} (checksum cambio)"
+                    : "Aplicando migracion {Migration} en {Database}",
                 migrationName,
                 databaseOverride ?? "diccionario");
-
-            var scriptContent = SqlScriptLoader.ReadEmbeddedMigrationContent(resourceName);
-            var checksum = ComputeSha256Hex(scriptContent);
 
             try
             {
@@ -182,26 +186,50 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                         cancellationToken);
                 }
 
-                await _sqlExecutor.ExecuteNonQueryAsync(
-                    InsertMigrationSql,
-                    new Dictionary<string, object?>
-                    {
-                        ["migration"] = migrationName,
-                        ["batch"] = batch,
-                        ["checksum_sha256"] = checksum
-                    },
-                    _settings.CommandTimeoutSeconds,
-                    databaseOverride,
-                    cancellationToken);
+                if (isReapply)
+                {
+                    await _sqlExecutor.ExecuteNonQueryAsync(
+                        UpdateMigrationSql,
+                        new Dictionary<string, object?>
+                        {
+                            ["migration"] = migrationName,
+                            ["checksum"] = checksum
+                        },
+                        _settings.CommandTimeoutSeconds,
+                        databaseOverride,
+                        cancellationToken);
 
-                appliedMigrations.Add(migrationName);
-                appliedCount++;
+                    appliedMigrations[migrationName] = checksum;
+                    appliedCount++;
 
-                _logger.LogInformation(
-                    "Migracion {Migration} aplicada correctamente en {Database} (checksum {Checksum})",
-                    migrationName,
-                    databaseOverride ?? "diccionario",
-                    checksum);
+                    _logger.LogInformation(
+                        "Migracion {Migration} re-aplicada en {Database} (checksum cambio)",
+                        migrationName,
+                        databaseOverride ?? "diccionario");
+                }
+                else
+                {
+                    await _sqlExecutor.ExecuteNonQueryAsync(
+                        InsertMigrationSql,
+                        new Dictionary<string, object?>
+                        {
+                            ["migration"] = migrationName,
+                            ["batch"] = batch,
+                            ["checksum_sha256"] = checksum
+                        },
+                        _settings.CommandTimeoutSeconds,
+                        databaseOverride,
+                        cancellationToken);
+
+                    appliedMigrations[migrationName] = checksum;
+                    appliedCount++;
+
+                    _logger.LogInformation(
+                        "Migracion {Migration} aplicada correctamente en {Database} (checksum {Checksum})",
+                        migrationName,
+                        databaseOverride ?? "diccionario",
+                        checksum);
+                }
             }
             catch (Exception ex)
             {
@@ -220,6 +248,38 @@ public class SqlMigrationRunner : ISqlMigrationRunner
             appliedCount,
             skippedCount,
             resourceNames.Count);
+    }
+
+    private async Task<Dictionary<string, string?>> LoadAppliedMigrationsAsync(
+        string? databaseOverride,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _sqlExecutor.QueryStringColumnAsync(
+            AppliedMigrationsSql,
+            "migration",
+            _settings.CommandTimeoutSeconds,
+            databaseOverride,
+            cancellationToken);
+
+        var appliedMigrations = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrEmpty(row))
+                continue;
+
+            var separatorIndex = row.IndexOf('|');
+            if (separatorIndex < 0)
+            {
+                appliedMigrations[row] = null;
+                continue;
+            }
+
+            var name = row[..separatorIndex];
+            var storedChecksum = row[(separatorIndex + 1)..];
+            appliedMigrations[name] = string.IsNullOrEmpty(storedChecksum) ? null : storedChecksum;
+        }
+
+        return appliedMigrations;
     }
 
     private async Task<string?> ResolveNombreBdColumnAsync(CancellationToken cancellationToken)
