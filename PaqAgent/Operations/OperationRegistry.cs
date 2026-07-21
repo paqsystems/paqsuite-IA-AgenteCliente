@@ -137,6 +137,17 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, ComprasComposicionSaldosOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new ComprasComposicionSaldosOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<ComprasComposicionSaldosOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
