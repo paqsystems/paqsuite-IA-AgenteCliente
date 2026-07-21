@@ -130,9 +130,12 @@ BEGIN
     END;
 
     SET @descS1 = CASE
-        WHEN @hasDescripcio = 1 THEN N's1.DESCRIPCIO'
-        WHEN @hasDescripcion = 1 THEN N's1.DESCRIPCION'
-        WHEN @hasNomCta = 1 THEN N's1.NOM_CTA'
+        WHEN @hasSba01 = 1 AND @hasIdSba01 = 1 AND @hasDescripcio = 1
+            THEN N's1.DESCRIPCIO'
+        WHEN @hasSba01 = 1 AND @hasIdSba01 = 1 AND @hasDescripcion = 1
+            THEN N's1.DESCRIPCION'
+        WHEN @hasSba01 = 1 AND @hasIdSba01 = 1 AND @hasNomCta = 1
+            THEN N's1.NOM_CTA'
         ELSE N'NULL'
     END;
 

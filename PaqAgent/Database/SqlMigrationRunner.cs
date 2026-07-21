@@ -186,6 +186,16 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                         cancellationToken);
                 }
 
+                // Solo company: verificar que el SP/objeto principal quedó creado
+                // antes de registrar la migración como aplicada.
+                if (databaseOverride is not null)
+                {
+                    await EnsurePrimaryObjectExistsAsync(
+                        migrationName,
+                        databaseOverride,
+                        cancellationToken);
+                }
+
                 if (isReapply)
                 {
                     await _sqlExecutor.ExecuteNonQueryAsync(
@@ -345,6 +355,102 @@ public class SqlMigrationRunner : ISqlMigrationRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private async Task EnsurePrimaryObjectExistsAsync(
+        string migrationName,
+        string databaseOverride,
+        CancellationToken cancellationToken)
+    {
+        var objectName = TryExtractObjectNameFromMigration(migrationName);
+        if (objectName is null)
+        {
+            _logger.LogWarning(
+                "No se pudo determinar el objeto SQL de la migracion {Migration}; se omite la verificacion post-DDL",
+                migrationName);
+            return;
+        }
+
+        // QueryStringColumnAsync no acepta parametros: el nombre ya fue validado
+        // (solo [A-Za-z0-9_]) en TryExtractObjectNameFromMigration.
+        var sql = $"""
+            SELECT CAST(COUNT(*) AS NVARCHAR(32)) AS object_count
+            FROM sys.objects
+            WHERE name = N'{objectName}'
+              AND type IN (N'P', N'FN', N'IF', N'TF', N'V')
+            """;
+
+        var counts = await _sqlExecutor.QueryStringColumnAsync(
+            sql,
+            "object_count",
+            _settings.CommandTimeoutSeconds,
+            databaseOverride,
+            cancellationToken);
+
+        var countText = counts.FirstOrDefault();
+        if (!int.TryParse(countText, out var count) || count <= 0)
+        {
+            _logger.LogError(
+                "Migracion {Migration} ejecutada pero el objeto {ObjectName} no existe en {Database}",
+                migrationName,
+                objectName,
+                databaseOverride);
+
+            throw new InvalidOperationException(
+                $"Migración {migrationName} ejecutada pero el objeto {objectName} " +
+                $"no existe en {databaseOverride}. El DDL puede haber fallado silenciosamente.");
+        }
+    }
+
+    /// <summary>
+    /// Extrae el nombre del objeto SQL desde el archivo de migracion.
+    /// Ejemplo: 2026_07_20_000030_paq_tesoreria_listado_saldos.sql → PAQ_Tesoreria_ListadoSaldos
+    /// Solo aplica cuando el sufijo empieza con "paq_" (omite update_/create_/fix_).
+    /// </summary>
+    internal static string? TryExtractObjectNameFromMigration(string migrationFileName)
+    {
+        var name = migrationFileName;
+        if (name.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+            name = name[..^4];
+
+        // YYYY_MM_DD_NNNNNN_suffix
+        var parts = name.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 5)
+            return null;
+
+        // parts[0]=YYYY, [1]=MM, [2]=DD, [3]=NNNNNN, [4..]=suffix
+        if (parts[0].Length != 4 || !parts[0].All(char.IsDigit)
+            || parts[1].Length != 2 || !parts[1].All(char.IsDigit)
+            || parts[2].Length != 2 || !parts[2].All(char.IsDigit)
+            || !parts[3].All(char.IsDigit))
+            return null;
+
+        var suffixParts = parts.Skip(4).ToArray();
+        if (suffixParts.Length < 2
+            || !string.Equals(suffixParts[0], "paq", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var domain = ToPascalCase(suffixParts[1]);
+        var feature = string.Concat(suffixParts.Skip(2).Select(ToPascalCase));
+
+        var objectName = string.IsNullOrEmpty(feature)
+            ? $"PAQ_{domain}"
+            : $"PAQ_{domain}_{feature}";
+
+        // Defensa contra inyeccion SQL al embeber el nombre en la consulta.
+        if (objectName.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch == '_')))
+            return null;
+
+        return objectName;
+    }
+
+    private static string ToPascalCase(string segment)
+    {
+        if (string.IsNullOrEmpty(segment))
+            return string.Empty;
+
+        var lower = segment.ToLowerInvariant();
+        return char.ToUpperInvariant(lower[0]) + lower[1..];
     }
 
     private async Task EnsureSchemaAsync(string? databaseOverride, CancellationToken cancellationToken)
