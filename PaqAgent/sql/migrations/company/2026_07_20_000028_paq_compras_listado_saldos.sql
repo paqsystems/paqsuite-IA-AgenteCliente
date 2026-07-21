@@ -26,7 +26,6 @@ BEGIN
 
     DECLARE @hasCpa21       BIT = 0,
             @hasCpa01       BIT = 0,
-            @hasImporteTot  BIT = 0,
             @hasFechaCont   BIT = 0,
             @hasAnulado     BIT = 0,
             @hasEstado      BIT = 0,
@@ -41,9 +40,6 @@ BEGIN
     IF OBJECT_ID(N'dbo.CPA21', N'U') IS NOT NULL SET @hasCpa21 = 1;
     IF OBJECT_ID(N'dbo.CPA01', N'U') IS NOT NULL SET @hasCpa01 = 1;
 
-    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_NAME = N'CPA04' AND COLUMN_NAME = N'IMPORTE_TOT')
-        SET @hasImporteTot = 1;
     IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_NAME = N'CPA04' AND COLUMN_NAME = N'FECHA_CONT')
         SET @hasFechaCont = 1;
@@ -80,8 +76,7 @@ BEGIN
         WHERE TABLE_NAME = N'CPA01' AND COLUMN_NAME = N'COD_COMPRADOR')
         SET @hasCodComprador = 1;
 
-    DECLARE @importeExpr   NVARCHAR(MAX),
-            @joinCpa21     NVARCHAR(MAX),
+    DECLARE @joinCpa21     NVARCHAR(MAX),
             @joinCpa01     NVARCHAR(MAX),
             @dhExpr        NVARCHAR(MAX),
             @saldoCase     NVARCHAR(MAX),
@@ -94,11 +89,6 @@ BEGIN
             @grouped       NVARCHAR(MAX),
             @sqlTotal      NVARCHAR(MAX),
             @sqlPaged      NVARCHAR(MAX);
-
-    SET @importeExpr = CASE
-        WHEN @hasImporteTot = 1 THEN N'c.IMPORTE_TOT'
-        ELSE N'c.IMPORTE'
-    END;
 
     SET @joinCpa21 = CASE
         WHEN @hasCpa21 = 1 THEN N'LEFT JOIN CPA21 c21 ON c21.T_COMP = c.T_COMP'
@@ -113,14 +103,14 @@ BEGIN
     SET @dhExpr = @hasDhExpr;
     IF @dhExpr = N'NULL'
         SET @saldoCase = N'CASE
-            WHEN c.T_COMP = ''REC'' THEN -(' + @importeExpr + N')
-            ELSE -(' + @importeExpr + N')
+            WHEN c.T_COMP = ''REC'' THEN -(c.IMPORTE_TO)
+            ELSE -(c.IMPORTE_TO)
         END';
     ELSE
         SET @saldoCase = N'CASE
-            WHEN c.T_COMP = ''REC'' THEN -(' + @importeExpr + N')
-            WHEN ' + @dhExpr + N' = ''D'' THEN (' + @importeExpr + N')
-            ELSE -(' + @importeExpr + N')
+            WHEN c.T_COMP = ''REC'' THEN -(c.IMPORTE_TO)
+            WHEN ' + @dhExpr + N' = ''D'' THEN (c.IMPORTE_TO)
+            ELSE -(c.IMPORTE_TO)
         END';
 
     SET @razonExpr = CASE
