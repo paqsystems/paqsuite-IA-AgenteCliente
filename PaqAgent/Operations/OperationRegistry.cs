@@ -148,6 +148,17 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, TesoreriaListadoSaldosOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new TesoreriaListadoSaldosOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<TesoreriaListadoSaldosOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
