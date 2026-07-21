@@ -170,6 +170,18 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, StockPartidaListadoSaldosOperation.OperationKey,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new StockPartidaListadoSaldosOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<StockPartidaListadoSaldosOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
