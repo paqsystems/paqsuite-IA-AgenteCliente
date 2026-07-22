@@ -203,6 +203,17 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, TesoreriaMayorCuentaOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new TesoreriaMayorCuentaOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<TesoreriaMayorCuentaOperation>());
+                continue;
+            }
+
             if (string.Equals(name, StockListadoSaldosOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
             {
                 handlers[name] = new StockListadoSaldosOperation(
