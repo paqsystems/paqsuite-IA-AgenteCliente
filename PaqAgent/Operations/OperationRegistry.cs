@@ -115,6 +115,17 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, VentasResumenCuentaOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new VentasResumenCuentaOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<VentasResumenCuentaOperation>());
+                continue;
+            }
+
             if (string.Equals(name, VentasComposicionSaldosOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
             {
                 handlers[name] = new VentasComposicionSaldosOperation(
