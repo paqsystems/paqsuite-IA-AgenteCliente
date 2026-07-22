@@ -137,6 +137,28 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, VentasIvaVentasOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new VentasIvaVentasOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<VentasIvaVentasOperation>());
+                continue;
+            }
+
+            if (string.Equals(name, ComprasIvaComprasOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new ComprasIvaComprasOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<ComprasIvaComprasOperation>());
+                continue;
+            }
+
             if (string.Equals(name, VentasComposicionSaldosOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
             {
                 handlers[name] = new VentasComposicionSaldosOperation(
