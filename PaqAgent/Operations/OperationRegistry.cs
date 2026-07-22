@@ -237,6 +237,27 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, StockMovimientoOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new StockMovimientoOperation(name, definition.StoredProcedure, definition.Connection, _sqlExecutor, _loggerFactory.CreateLogger<StockMovimientoOperation>());
+                continue;
+            }
+            if (string.Equals(name, StockPartidaMovimientoOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new StockPartidaMovimientoOperation(name, definition.StoredProcedure, definition.Connection, _sqlExecutor, _loggerFactory.CreateLogger<StockPartidaMovimientoOperation>());
+                continue;
+            }
+            if (string.Equals(name, StockInventarioValorizadoOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new StockInventarioValorizadoOperation(name, definition.StoredProcedure, definition.Connection, _sqlExecutor, _loggerFactory.CreateLogger<StockInventarioValorizadoOperation>());
+                continue;
+            }
+            if (string.Equals(name, StockPartidaInventarioValorizadoOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new StockPartidaInventarioValorizadoOperation(name, definition.StoredProcedure, definition.Connection, _sqlExecutor, _loggerFactory.CreateLogger<StockPartidaInventarioValorizadoOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
