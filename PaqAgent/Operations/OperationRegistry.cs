@@ -270,6 +270,17 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, AcopiosFacturasElegiblesListOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosFacturasElegiblesListOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosFacturasElegiblesListOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
