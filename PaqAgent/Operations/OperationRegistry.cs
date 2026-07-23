@@ -281,6 +281,17 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, AcopiosPedidosDisponiblesListOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosPedidosDisponiblesListOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosPedidosDisponiblesListOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
