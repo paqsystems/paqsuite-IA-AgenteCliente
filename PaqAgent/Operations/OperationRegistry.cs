@@ -325,6 +325,28 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, AcopiosSaldosListOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosSaldosListOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosSaldosListOperation>());
+                continue;
+            }
+
+            if (string.Equals(name, AcopiosFacturaAcopioCloseOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosFacturaAcopioCloseOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosFacturaAcopioCloseOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
