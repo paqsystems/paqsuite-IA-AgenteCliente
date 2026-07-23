@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PaqAgent.Configuration;
 using PaqAgent.Database;
+using PaqAgent.Operations.Acopios;
 
 namespace PaqAgent.Operations;
 
@@ -255,6 +256,17 @@ public class OperationRegistry
             if (string.Equals(name, StockPartidaInventarioValorizadoOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
             {
                 handlers[name] = new StockPartidaInventarioValorizadoOperation(name, definition.StoredProcedure, definition.Connection, _sqlExecutor, _loggerFactory.CreateLogger<StockPartidaInventarioValorizadoOperation>());
+                continue;
+            }
+
+            if (string.Equals(name, AcopiosParametrosListOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosParametrosListOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosParametrosListOperation>());
                 continue;
             }
 
