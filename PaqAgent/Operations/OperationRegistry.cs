@@ -369,6 +369,28 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, AcopiosFacturaDetalleGetOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosFacturaDetalleGetOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosFacturaDetalleGetOperation>());
+                continue;
+            }
+
+            if (string.Equals(name, AcopiosPedidoDetalleGetOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosPedidoDetalleGetOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosPedidoDetalleGetOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
