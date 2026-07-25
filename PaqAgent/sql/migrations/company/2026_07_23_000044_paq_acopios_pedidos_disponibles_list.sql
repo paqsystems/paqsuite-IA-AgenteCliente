@@ -281,7 +281,8 @@ BEGIN
         IF @hasGva14 = 1
         BEGIN
             SET @joinCli = N'LEFT JOIN ' + @bdQuoted + N'.dbo.GVA14 AS cli
-                ON cli.COD_CLIENT = ped.' + QUOTENAME(@colCodClient);
+                ON cli.COD_CLIENT COLLATE DATABASE_DEFAULT
+                 = ped.' + QUOTENAME(@colCodClient) + N' COLLATE DATABASE_DEFAULT';
             SET @selRazon = CASE WHEN @colRazon IS NOT NULL
                 THEN N'CAST(cli.' + QUOTENAME(@colRazon) + N' AS NVARCHAR(200))'
                 ELSE N'CAST(NULL AS NVARCHAR(200))' END;

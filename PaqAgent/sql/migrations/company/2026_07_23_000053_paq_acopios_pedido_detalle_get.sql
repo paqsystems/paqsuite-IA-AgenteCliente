@@ -143,8 +143,7 @@ BEGIN
     ELSE IF @empresa_bd IS NOT NULL AND LTRIM(RTRIM(@empresa_bd)) <> N''
     BEGIN
         DELETE FROM #empresas
-        WHERE nombreBd COLLATE Latin1_General_CI_AI
-              <> LTRIM(RTRIM(@empresa_bd)) COLLATE Latin1_General_CI_AI;
+        WHERE LOWER(LTRIM(RTRIM(nombreBd))) <> LOWER(LTRIM(RTRIM(@empresa_bd)));
     END
 
     IF NOT EXISTS (SELECT 1 FROM #empresas)

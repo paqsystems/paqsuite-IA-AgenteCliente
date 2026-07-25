@@ -152,8 +152,11 @@ BEGIN
 
     IF @hasGva14 = 1
     BEGIN
+        -- GVA14.COD_CLIENT suele ser Latin1_General_BIN; PQ_ACOPIOS_FACTURAS.cod_client
+        -- es collation de BD. Sin COLLATE DATABASE_DEFAULT falla el JOIN.
         SET @joinCli = N'LEFT JOIN dbo.GVA14 AS cli
-            ON cli.' + QUOTENAME(@colGva14Client) + N' = ac.' + QUOTENAME(@colCodClient);
+            ON cli.' + QUOTENAME(@colGva14Client) + N' COLLATE DATABASE_DEFAULT
+             = ac.' + QUOTENAME(@colCodClient) + N' COLLATE DATABASE_DEFAULT';
         IF @colGva14Razon IS NOT NULL
             SET @selRazon = N'CAST(cli.' + QUOTENAME(@colGva14Razon) + N' AS NVARCHAR(200))';
     END

@@ -300,8 +300,8 @@ BEGIN
         IF @hasAcopio = 1 AND @colAcTComp IS NOT NULL AND @colAcNComp IS NOT NULL
         BEGIN
             SET @joinAc = N'LEFT JOIN ' + @bdQuoted + N'.dbo.PQ_ACOPIOS_FACTURAS AS ac
-                ON ac.' + QUOTENAME(@colAcTComp) + N' = cab.T_COMP
-               AND ac.' + QUOTENAME(@colAcNComp) + N' = cab.N_COMP';
+                ON ac.' + QUOTENAME(@colAcTComp) + N' COLLATE DATABASE_DEFAULT = cab.T_COMP COLLATE DATABASE_DEFAULT
+               AND ac.' + QUOTENAME(@colAcNComp) + N' COLLATE DATABASE_DEFAULT = cab.N_COMP COLLATE DATABASE_DEFAULT';
             SET @selConfig = N'CAST(CASE WHEN ac.' + QUOTENAME(@colAcTComp) + N' IS NOT NULL THEN 1 ELSE 0 END AS BIT)';
             SET @selAcopioId = CASE WHEN @colAcId IS NOT NULL
                 THEN N'CAST(ac.' + QUOTENAME(@colAcId) + N' AS INT)' ELSE N'CAST(NULL AS INT)' END;
@@ -365,7 +365,7 @@ BEGIN
                     FROM ' + @bdQuoted + N'.dbo.GVA53 AS det
                     WHERE det.T_COMP = cab.T_COMP
                       AND det.N_COMP = cab.N_COMP
-                      AND det.COD_ARTICU LIKE @p_prefijo + N''%''
+                      AND det.COD_ARTICU COLLATE DATABASE_DEFAULT LIKE @p_prefijo + N''%'' COLLATE DATABASE_DEFAULT
               )
               ' + @whereExtra + N';';
 
