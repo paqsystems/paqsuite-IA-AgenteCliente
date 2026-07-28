@@ -33,4 +33,11 @@
     <EmbeddedResource Include="sql\migrations\**\*.sql" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="appsettings.local.json">
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
