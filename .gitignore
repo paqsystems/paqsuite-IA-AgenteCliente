@@ -17,6 +17,7 @@ logs/
 *.log
 
 ## Config local (no commitear tokens reales)
+appsettings.local.json
 appsettings.Local.json
 appsettings.*.local.json
 

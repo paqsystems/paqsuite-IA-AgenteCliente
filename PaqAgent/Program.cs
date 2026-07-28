@@ -11,6 +11,8 @@ using Serilog;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+builder.Configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: false);
+
 builder.Services.AddWindowsService(options =>
 {
     options.ServiceName = "PaqAgent";
