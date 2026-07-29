@@ -75,8 +75,15 @@ public class SignalRAgentConnection : IAgentConnection, IAsyncDisposable
     {
         if (_connection is not null)
         {
-            await _connection.StopAsync(cancellationToken);
-            _logger.LogInformation("Desconectado del gateway");
+            try
+            {
+                await _connection.StopAsync(cancellationToken);
+                _logger.LogInformation("Desconectado del gateway");
+            }
+            catch (ObjectDisposedException)
+            {
+                _logger.LogWarning("HubConnection ya dispuesto al intentar desconectar.");
+            }
         }
     }
 
@@ -181,20 +188,13 @@ public class SignalRAgentConnection : IAgentConnection, IAsyncDisposable
             }
         };
 
-        _connection.Closed += async error =>
+        _connection.Closed += error =>
         {
             if (error is not null)
-                _logger.LogWarning(error, "Conexion cerrada, intentando reconectar...");
-
-            await Task.Delay(TimeSpan.FromSeconds(5));
-            try
-            {
-                await ConnectAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al reconectar");
-            }
+                _logger.LogWarning(error, "Conexion cerrada con error.");
+            else
+                _logger.LogInformation("Conexion cerrada limpiamente.");
+            return Task.CompletedTask;
         };
     }
 
