@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using PaqAgent.Configuration;
 using PaqAgent.Database;
 using PaqAgent.Operations.Acopios;
+using PaqAgent.Operations.PartesProduccion;
 
 namespace PaqAgent.Operations;
 
@@ -388,6 +389,19 @@ public class OperationRegistry
                     definition.Connection,
                     _sqlExecutor,
                     _loggerFactory.CreateLogger<AcopiosPedidoDetalleGetOperation>());
+                continue;
+            }
+
+            if (string.Equals(name,
+                PartesProduccionParametrosListOperation.OperationKey,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new PartesProduccionParametrosListOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<PartesProduccionParametrosListOperation>());
                 continue;
             }
 
