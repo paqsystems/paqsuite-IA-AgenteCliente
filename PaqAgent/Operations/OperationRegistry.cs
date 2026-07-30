@@ -405,6 +405,19 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name,
+                PartesProduccionInformesGestionOperation.OperationKey,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new PartesProduccionInformesGestionOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<PartesProduccionInformesGestionOperation>());
+                continue;
+            }
+
             handlers[name] = new StoredProcedureOperation(
                 name,
                 definition.StoredProcedure,
