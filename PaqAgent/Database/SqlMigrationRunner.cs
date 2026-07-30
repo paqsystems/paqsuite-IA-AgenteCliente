@@ -192,6 +192,7 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                 {
                     await EnsurePrimaryObjectExistsAsync(
                         migrationName,
+                        scriptContent,
                         databaseOverride,
                         cancellationToken);
                 }
@@ -359,10 +360,12 @@ public class SqlMigrationRunner : ISqlMigrationRunner
 
     private async Task EnsurePrimaryObjectExistsAsync(
         string migrationName,
+        string migrationSql,
         string databaseOverride,
         CancellationToken cancellationToken)
     {
-        var objectName = TryExtractObjectNameFromMigration(migrationName);
+        var objectName = TryExtractObjectNameFromSql(migrationSql)
+            ?? TryExtractObjectNameFromMigration(migrationName);
         if (objectName is null)
         {
             _logger.LogWarning(
@@ -372,7 +375,7 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         }
 
         // QueryStringColumnAsync no acepta parametros: el nombre ya fue validado
-        // (solo [A-Za-z0-9_]) en TryExtractObjectNameFromMigration.
+        // (solo [A-Za-z0-9_]) en TryExtractObjectNameFromSql / TryExtractObjectNameFromMigration.
         var sql = $"""
             SELECT CAST(COUNT(*) AS NVARCHAR(32)) AS object_count
             FROM sys.objects
@@ -400,6 +403,68 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                 $"Migración {migrationName} ejecutada pero el objeto {objectName} " +
                 $"no existe en {databaseOverride}. El DDL puede haber fallado silenciosamente.");
         }
+    }
+
+    /// <summary>
+    /// Extrae el nombre del objeto SQL desde el contenido del script
+    /// (CREATE OR ALTER PROCEDURE / CREATE PROCEDURE / CREATE OR ALTER FUNCTION).
+    /// Ejemplo: "CREATE OR ALTER PROCEDURE dbo.PAQ_PartesProduccion_ParametrosList"
+    ///          → "PAQ_PartesProduccion_ParametrosList"
+    /// </summary>
+    internal static string? TryExtractObjectNameFromSql(string sql)
+    {
+        if (string.IsNullOrWhiteSpace(sql))
+            return null;
+
+        var lines = sql.Split(
+            ['\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        // Prefijos más largos primero para no confundir OR ALTER con CREATE PROCEDURE.
+        string[] prefixes =
+        [
+            "CREATE OR ALTER PROCEDURE",
+            "CREATE OR ALTER FUNCTION",
+            "CREATE PROCEDURE",
+        ];
+
+        foreach (var line in lines.Take(20))
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            if (line.StartsWith("--", StringComparison.Ordinal))
+                continue;
+
+            foreach (var prefix in prefixes)
+            {
+                if (!line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var remainder = line[prefix.Length..].Trim();
+                if (remainder.Length == 0)
+                    continue;
+
+                var tokenEnd = remainder.IndexOfAny([' ', '(', '\t']);
+                var qualified = tokenEnd < 0 ? remainder : remainder[..tokenEnd];
+                qualified = qualified.Trim().Trim('[', ']');
+
+                var lastDot = qualified.LastIndexOf('.');
+                var objectName = lastDot >= 0 ? qualified[(lastDot + 1)..] : qualified;
+                objectName = objectName.Trim().Trim('[', ']');
+
+                if (string.IsNullOrEmpty(objectName))
+                    continue;
+
+                // Defensa contra inyeccion SQL al embeber el nombre en la consulta.
+                if (objectName.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch == '_')))
+                    return null;
+
+                return objectName;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
