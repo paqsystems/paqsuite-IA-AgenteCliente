@@ -45,15 +45,33 @@ var host = builder.Build();
 using (var scope = host.Services.CreateScope())
 {
     var migrationRunner = scope.ServiceProvider.GetRequiredService<ISqlMigrationRunner>();
-    try
+    const int maxAttempts = 5;
+    var delaySeconds = 5;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
     {
-        await migrationRunner.RunAsync(CancellationToken.None);
-    }
-    catch (Exception ex)
-    {
-        Log.Fatal(ex, "PaqAgent no pudo iniciar: fallo en migraciones SQL. El servicio no se conectará al Gateway.");
-        await Log.CloseAndFlushAsync();
-        Environment.Exit(1);
+        try
+        {
+            await migrationRunner.RunAsync(CancellationToken.None);
+            break;
+        }
+        catch (Exception ex) when (attempt < maxAttempts)
+        {
+            Log.Warning(
+                ex,
+                "Fallo en migraciones SQL (intento {Attempt}/{MaxAttempts}). Reintento en {DelaySeconds}s...",
+                attempt, maxAttempts, delaySeconds);
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+            delaySeconds *= 2;
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(
+                ex,
+                "PaqAgent no pudo iniciar: fallo en migraciones SQL tras {MaxAttempts} intentos. El servicio no se conectará al Gateway.",
+                maxAttempts);
+            await Log.CloseAndFlushAsync();
+            Environment.Exit(1);
+        }
     }
 }
 

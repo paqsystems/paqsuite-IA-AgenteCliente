@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.ServiceProcess;
+using Microsoft.Win32;
 
 namespace PaqAgentInstaller;
 
@@ -37,6 +38,10 @@ internal sealed class WindowsServiceHelper
         {
             // ignore
         }
+
+        var appDir = Path.GetFullPath(Path.GetDirectoryName(exePath)
+            ?? throw new InvalidOperationException($"No se pudo determinar el directorio de {exePath}"));
+        SetServiceAppDirectory(serviceName, appDir);
     }
 
     public void UninstallService(string serviceName)
@@ -109,6 +114,14 @@ internal sealed class WindowsServiceHelper
         {
             return "NotInstalled";
         }
+    }
+
+    private static void SetServiceAppDirectory(string serviceName, string appDirectory)
+    {
+        var keyPath = $@"SYSTEM\CurrentControlSet\Services\{serviceName}\Parameters";
+        using var key = Registry.LocalMachine.CreateSubKey(keyPath)
+            ?? throw new InvalidOperationException($"No se pudo abrir/crear la clave de registro {keyPath}");
+        key.SetValue("AppDirectory", appDirectory, RegistryValueKind.String);
     }
 
     private static void RunSc(string arguments)
