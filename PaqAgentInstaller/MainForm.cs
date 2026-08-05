@@ -8,6 +8,7 @@ public sealed class MainForm : Form
     private readonly GitHubReleaseService _github = new();
     private readonly AgentSettingsService _settingsService = new();
     private readonly WindowsServiceHelper _serviceHelper = new();
+    private readonly UpdateOrchestrator _updateOrchestrator;
 
     private TabControl _tabs = null!;
 
@@ -38,6 +39,8 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
+        _updateOrchestrator = new UpdateOrchestrator(_github, _settingsService, _serviceHelper);
+
         Text = "PaqSuite Agent Installer";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(720, 640);
@@ -390,6 +393,16 @@ public sealed class MainForm : Form
                 exePath);
             _serviceHelper.StartService(Constants.AGENT_SERVICE_NAME);
 
+            try
+            {
+                TaskSchedulerHelper.RegisterUpdateTask(Application.ExecutablePath);
+                AppendLog(_logInstall, "Tarea de auto-actualización registrada en Task Scheduler.");
+            }
+            catch (Exception ex)
+            {
+                AppendLog(_logInstall, $"ADVERTENCIA: no se pudo registrar la tarea de auto-update: {ex.Message}");
+            }
+
             _detectedInstallPath = installPath;
             RefreshInstalledVersionLabel();
             AppendLog(_logInstall, "✓ Instalación completada");
@@ -475,55 +488,25 @@ public sealed class MainForm : Form
             _progressUpdate.Value = 0;
 
             var installPath = ResolveInstallPath();
-            var existingSettings = _settingsService.ReadSettings(installPath);
-
-            AppendLog(_logUpdate, "Deteniendo servicio...");
-            if (_serviceHelper.IsServiceInstalled(Constants.AGENT_SERVICE_NAME))
-                _serviceHelper.StopService(Constants.AGENT_SERVICE_NAME);
-
-            var tempRoot = Path.Combine(Path.GetTempPath(), "PaqAgentInstaller", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(tempRoot);
-            var zipPath = Path.Combine(tempRoot, "release.zip");
-
-            AppendLog(_logUpdate, $"Descargando {_pendingRelease.Version}...");
-            var progress = new Progress<int>(p =>
-            {
-                if (InvokeRequired)
-                    BeginInvoke(() => _progressUpdate.Value = p);
-                else
-                    _progressUpdate.Value = p;
-            });
-            await _github.DownloadReleaseAsync(_pendingRelease.DownloadUrl, zipPath, progress);
-
-            AppendLog(_logUpdate, "Descomprimiendo...");
-            var extractPath = Path.Combine(tempRoot, "extract");
-            ZipFile.ExtractToDirectory(zipPath, extractPath, overwriteFiles: true);
-            var sourceDir = FindPublishRoot(extractPath);
-
-            AppendLog(_logUpdate, "Copiando binarios (preservando appsettings.local.json)...");
-            CopyDirectory(sourceDir, installPath, preserveLocalSettings: true);
-
-            // Reafirmar settings leídos (por si el zip traía un local vacío).
-            _settingsService.WriteSettings(installPath, existingSettings);
-            WriteInstalledVersion(installPath, _pendingRelease.Version);
-
-            AppendLog(_logUpdate, "Iniciando servicio...");
-            if (_serviceHelper.IsServiceInstalled(Constants.AGENT_SERVICE_NAME))
-                _serviceHelper.StartService(Constants.AGENT_SERVICE_NAME);
-            else
-            {
-                var exePath = Path.Combine(installPath, Constants.AGENT_EXE_NAME);
-                _serviceHelper.InstallService(
-                    Constants.AGENT_SERVICE_NAME,
-                    Constants.AGENT_DISPLAY_NAME,
-                    exePath);
-                _serviceHelper.StartService(Constants.AGENT_SERVICE_NAME);
-            }
+            var updated = await _updateOrchestrator.CheckAndUpdateAsync(
+                installPath,
+                message => AppendLog(_logUpdate, message),
+                pct =>
+                {
+                    if (InvokeRequired)
+                        BeginInvoke(() => _progressUpdate.Value = pct);
+                    else
+                        _progressUpdate.Value = pct;
+                });
 
             RefreshInstalledVersionLabel();
             _btnUpdate.Enabled = false;
-            AppendLog(_logUpdate, "✓ Actualización completada");
-            MessageBox.Show(this, "Actualización completada.", "Actualizar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _pendingRelease = null;
+
+            if (updated)
+                MessageBox.Show(this, "Actualización completada.", "Actualizar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            else
+                MessageBox.Show(this, "No hay actualización pendiente.", "Actualizar", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
