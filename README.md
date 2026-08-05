@@ -408,6 +408,15 @@ También puede invocarse remotamente vía `RunDiagnostics` desde el gateway.
 
 ---
 
+## Cómo arrancar el agente en modo desarrollo
+
+- $env:DOTNET_ENVIRONMENT = "Development"
+- dotnet run --project PaqAgent\PaqAgent.csproj
+
+---
+
 ## Licencia
 
 Proyecto interno de **PaqSystems**.
+
+
