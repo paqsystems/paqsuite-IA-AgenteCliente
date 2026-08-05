@@ -9,6 +9,11 @@ public static class LogConfiguration
     public static void Configure(IConfiguration configuration)
     {
         var logDirectory = configuration["Logging:LogDirectory"] ?? "logs";
+        if (!Path.IsPathRooted(logDirectory))
+        {
+            var exeDir = AppContext.BaseDirectory;
+            logDirectory = Path.GetFullPath(Path.Combine(exeDir, logDirectory));
+        }
         var minimumLevel = configuration["Logging:MinimumLevel"] ?? "Information";
         var level = Enum.TryParse<LogEventLevel>(minimumLevel, true, out var parsed)
             ? parsed
