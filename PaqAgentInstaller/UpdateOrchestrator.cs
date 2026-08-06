@@ -93,6 +93,26 @@ internal sealed class UpdateOrchestrator
         }
 
         log("✓ Actualización completada");
+
+        // Registrar tarea de auto-update si no existe aún.
+        // El instalador debe estar junto al agente en installPath.
+        try
+        {
+            if (!TaskSchedulerHelper.IsTaskRegistered())
+            {
+                var installerExe = Path.Combine(installPath, "PaqAgentInstaller.exe");
+                if (File.Exists(installerExe))
+                {
+                    TaskSchedulerHelper.RegisterUpdateTask(installerExe);
+                    log("Tarea de auto-actualización registrada en Task Scheduler.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log($"ADVERTENCIA: no se pudo registrar la tarea de auto-update: {ex.Message}");
+        }
+
         return true;
     }
 

@@ -393,9 +393,13 @@ public sealed class MainForm : Form
                 exePath);
             _serviceHelper.StartService(Constants.AGENT_SERVICE_NAME);
 
+            // Copiar el instalador a la carpeta de instalación para que la tarea
+            // de auto-update siempre apunte a una ubicación estable.
+            var installerDest = Path.Combine(installPath, "PaqAgentInstaller.exe");
             try
             {
-                TaskSchedulerHelper.RegisterUpdateTask(Application.ExecutablePath);
+                File.Copy(Application.ExecutablePath, installerDest, overwrite: true);
+                TaskSchedulerHelper.RegisterUpdateTask(installerDest);
                 AppendLog(_logInstall, "Tarea de auto-actualización registrada en Task Scheduler.");
             }
             catch (Exception ex)
