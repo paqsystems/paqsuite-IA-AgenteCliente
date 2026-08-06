@@ -153,6 +153,14 @@ internal sealed class UpdateOrchestrator
                 continue;
             }
 
+            // Saltear el instalador: puede estar en ejecución si el update fue
+            // lanzado por la tarea programada (self-lock → IOException).
+            // El instalador se actualizará en la siguiente ejecución del update.
+            if (string.Equals(fileName, "PaqAgentInstaller.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var dest = Path.Combine(targetDir, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             File.Copy(file, dest, overwrite: true);
