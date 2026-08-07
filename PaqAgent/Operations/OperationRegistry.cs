@@ -392,6 +392,17 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, AcopiosPedidoDetallesBatchGetOperation.OperationKey,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosPedidoDetallesBatchGetOperation(
+                    name,
+                    definition.StoredProcedure,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosPedidoDetallesBatchGetOperation>());
+                continue;
+            }
+
             if (string.Equals(name,
                 PartesProduccionParametrosListOperation.OperationKey,
                 StringComparison.OrdinalIgnoreCase))
