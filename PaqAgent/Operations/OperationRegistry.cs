@@ -403,6 +403,18 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, AcopiosListaPreciosOpcionesOperation.OperationKey,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new AcopiosListaPreciosOpcionesOperation(
+                    name,
+                    definition.StoredProcedure,
+                    definition.Connection,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<AcopiosListaPreciosOpcionesOperation>());
+                continue;
+            }
+
             if (string.Equals(name,
                 PartesProduccionParametrosListOperation.OperationKey,
                 StringComparison.OrdinalIgnoreCase))
