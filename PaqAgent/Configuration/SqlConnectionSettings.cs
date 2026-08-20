@@ -5,6 +5,7 @@ public class SqlConnectionSettings
     public const string SectionName = "SqlConnection";
 
     public string Server { get; set; } = string.Empty;
+    public string Port { get; set; } = "";
     public string Database { get; set; } = string.Empty;
     public string User { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
@@ -17,9 +18,14 @@ public class SqlConnectionSettings
 
     public string BuildConnectionString(string databaseOverride)
     {
+        var port = Port?.Trim() ?? "";
+        var dataSource = string.IsNullOrWhiteSpace(port) || port == "1433"
+            ? Server
+            : $"{Server},{port}";
+
         var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder
         {
-            DataSource = Server,
+            DataSource = dataSource,
             InitialCatalog = databaseOverride,
             UserID = User,
             Password = Password,

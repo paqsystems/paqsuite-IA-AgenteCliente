@@ -17,6 +17,7 @@ public sealed class MainForm : Form
     private TextBox _txtClientId = null!;
     private TextBox _txtGatewayUrl = null!;
     private TextBox _txtSqlServer = null!;
+    private TextBox _txtSqlPort = null!;
     private TextBox _txtSqlDatabase = null!;
     private TextBox _txtSqlUser = null!;
     private TextBox _txtSqlPassword = null!;
@@ -63,6 +64,7 @@ public sealed class MainForm : Form
             _txtClientId.Text = settings.ClientId;
             _txtGatewayUrl.Text = settings.GatewayUrl;
             _txtSqlServer.Text = settings.SqlServer;
+            _txtSqlPort.Text = settings.SqlPort;
             _txtSqlDatabase.Text = settings.SqlDatabase;
             _txtSqlUser.Text = settings.SqlUser;
             _txtSqlPassword.Text = settings.SqlPassword;
@@ -124,6 +126,8 @@ public sealed class MainForm : Form
         };
         var sqlLayout = CreateTwoColumnLayout();
         _txtSqlServer = AddLabeledTextBox(sqlLayout, "Servidor SQL");
+        _txtSqlPort = AddLabeledTextBox(sqlLayout, "Puerto SQL");
+        _txtSqlPort.PlaceholderText = "Dejar vacío para puerto por defecto (1433)";
         _txtSqlDatabase = AddLabeledTextBox(sqlLayout, "Base de datos (diccionario)");
         _txtSqlUser = AddLabeledTextBox(sqlLayout, "Usuario");
         _txtSqlPassword = AddLabeledTextBox(sqlLayout, "Contraseña");
@@ -529,6 +533,7 @@ public sealed class MainForm : Form
         ClientId = _txtClientId.Text.Trim(),
         GatewayUrl = _txtGatewayUrl.Text.Trim(),
         SqlServer = _txtSqlServer.Text.Trim(),
+        SqlPort = _txtSqlPort.Text.Trim(),
         SqlDatabase = _txtSqlDatabase.Text.Trim(),
         SqlUser = _txtSqlUser.Text.Trim(),
         SqlPassword = _txtSqlPassword.Text,

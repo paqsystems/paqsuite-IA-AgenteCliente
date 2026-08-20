@@ -34,6 +34,7 @@ internal sealed class AgentSettingsService
         if (root.TryGetProperty("SqlConnection", out var sql))
         {
             settings.SqlServer = GetString(sql, "Server");
+            settings.SqlPort = GetString(sql, "Port");
             settings.SqlDatabase = GetString(sql, "Database");
             settings.SqlUser = GetString(sql, "User");
             settings.SqlPassword = GetString(sql, "Password");
@@ -80,6 +81,7 @@ internal sealed class AgentSettingsService
             ["SqlConnection"] = new JsonObject
             {
                 ["Server"] = settings.SqlServer ?? "",
+                ["Port"] = settings.SqlPort ?? "",
                 ["Database"] = settings.SqlDatabase ?? "",
                 ["User"] = settings.SqlUser ?? "",
                 ["Password"] = settings.SqlPassword ?? "",
@@ -93,7 +95,7 @@ internal sealed class AgentSettingsService
     {
         var builder = new SqlConnectionStringBuilder
         {
-            DataSource = settings.SqlServer,
+            DataSource = BuildDataSource(settings),
             InitialCatalog = settings.SqlDatabase,
             UserID = settings.SqlUser,
             Password = settings.SqlPassword,
@@ -112,6 +114,16 @@ internal sealed class AgentSettingsService
         {
             return false;
         }
+    }
+
+    private static string BuildDataSource(AgentSettings settings)
+    {
+        var server = settings.SqlServer?.Trim() ?? "";
+        var port = settings.SqlPort?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(port) || port == "1433")
+            return server;
+
+        return $"{server},{port}";
     }
 
     private static string GetString(JsonElement parent, string name)
