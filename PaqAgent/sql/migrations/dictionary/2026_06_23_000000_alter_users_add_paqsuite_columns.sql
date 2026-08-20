@@ -97,4 +97,12 @@ IF NOT EXISTS (
 )
     ALTER TABLE dbo.users ADD updated_at DATETIME2 NULL;
 
+-- personal_access_tokens.expires_at
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'personal_access_tokens'
+    AND COLUMN_NAME = 'expires_at'
+)
+    ALTER TABLE dbo.personal_access_tokens ADD expires_at DATETIME2 NULL;
+
 GO
