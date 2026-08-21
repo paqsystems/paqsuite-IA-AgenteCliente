@@ -54,25 +54,9 @@ public sealed class MainForm : Form
 
     private void MainForm_Load(object? sender, EventArgs e)
     {
-        _detectedInstallPath = ResolveInstallPath();
+        _detectedInstallPath = InstallerPreferences.ReadLastInstallPath();
         _txtInstallPath.Text = _detectedInstallPath;
-
-        try
-        {
-            var settings = _settingsService.ReadSettings(_detectedInstallPath);
-            _txtAgentId.Text = settings.AgentId;
-            _txtClientId.Text = settings.ClientId;
-            _txtGatewayUrl.Text = settings.GatewayUrl;
-            _txtSqlServer.Text = settings.SqlServer;
-            _txtSqlPort.Text = settings.SqlPort;
-            _txtSqlDatabase.Text = settings.SqlDatabase;
-            _txtSqlUser.Text = settings.SqlUser;
-            _txtSqlPassword.Text = settings.SqlPassword;
-        }
-        catch
-        {
-            // Sin settings previos.
-        }
+        TryFillFromLocalSettings(_detectedInstallPath);
 
         RefreshInstalledVersionLabel();
         _lblAvailableVersion.Text = "Disponible: (sin verificar)";
@@ -412,6 +396,15 @@ public sealed class MainForm : Form
             }
 
             _detectedInstallPath = installPath;
+            try
+            {
+                InstallerPreferences.SaveLastInstallPath(installPath);
+            }
+            catch (Exception ex)
+            {
+                AppendLog(_logInstall, $"ADVERTENCIA: no se pudo guardar la carpeta de instalación: {ex.Message}");
+            }
+
             RefreshInstalledVersionLabel();
             AppendLog(_logInstall, "✓ Instalación completada");
             MessageBox.Show(this, "Instalación completada.", "Instalar", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -602,6 +595,30 @@ public sealed class MainForm : Form
             : $"Instalada: {version}";
     }
 
+    private void TryFillFromLocalSettings(string installPath)
+    {
+        try
+        {
+            var settingsPath = Path.Combine(installPath, Constants.LOCAL_SETTINGS_FILE);
+            if (!File.Exists(settingsPath))
+                return;
+
+            var settings = _settingsService.ReadSettings(installPath);
+            _txtAgentId.Text = settings.AgentId;
+            _txtClientId.Text = settings.ClientId;
+            _txtGatewayUrl.Text = settings.GatewayUrl;
+            _txtSqlServer.Text = settings.SqlServer;
+            _txtSqlPort.Text = settings.SqlPort;
+            _txtSqlDatabase.Text = settings.SqlDatabase;
+            _txtSqlUser.Text = settings.SqlUser;
+            // Contraseña: no autocompletar.
+        }
+        catch
+        {
+            // Sin settings previos o JSON ilegible.
+        }
+    }
+
     private string ResolveInstallPath()
     {
         if (!string.IsNullOrWhiteSpace(_txtInstallPath?.Text))
@@ -610,7 +627,7 @@ public sealed class MainForm : Form
         if (!string.IsNullOrWhiteSpace(_detectedInstallPath))
             return _detectedInstallPath;
 
-        return Constants.DEFAULT_INSTALL_PATH;
+        return InstallerPreferences.ReadLastInstallPath();
     }
 
     private static string FindPublishRoot(string extractPath)

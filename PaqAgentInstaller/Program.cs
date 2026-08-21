@@ -20,7 +20,7 @@ internal static class Program
     {
         try
         {
-            var installPath = Constants.DEFAULT_INSTALL_PATH;
+            var installPath = InstallerPreferences.ReadLastInstallPath();
             var settingsPath = Path.Combine(installPath, Constants.LOCAL_SETTINGS_FILE);
             if (!Directory.Exists(installPath) || !File.Exists(settingsPath))
                 return 0;
