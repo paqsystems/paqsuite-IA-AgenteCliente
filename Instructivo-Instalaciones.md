@@ -326,6 +326,131 @@ Resumen:
 
 ---
 
+## 5.1 Troubleshooting — Migraciones SQL al arrancar el agente
+
+Al iniciar por primera vez, PaqAgent aplica automáticamente los SP
+embebidos en el binario (`PaqAgent/sql/migrations/`). Si alguna
+migración falla, el agente **no conecta al Gateway** y queda en un
+loop de reintentos. Este es el escenario más frecuente en instalaciones
+nuevas.
+
+### Síntomas
+- El servicio PaqAgent inicia pero no aparece como online en Laravel.
+- En `C:\PaqSuite\PaqAgent\logs\` aparece un error similar a:
+
+```
+Error applying migration 2026_07_01_000003_create_paq_clientes_buscar.sql
+SqlException: The server principal "usuario_sql" is not able to access
+the database "TEC_METAL_PRUEBA" under the current security context.
+```
+
+- O bien:
+
+```
+Error applying migration ... Cannot open database "Diccionario_000205_012"
+requested by the login.
+```
+
+### Causas más frecuentes
+
+| Causa | Síntoma en log |
+|-------|----------------|
+| Usuario SQL sin permisos sobre la base diccionario | `Cannot open database "Diccionario_*"` |
+| Usuario SQL sin permisos sobre alguna base de empresa | `is not able to access the database "..."` |
+| Base diccionario con nombre incorrecto en `appsettings.local.json` | `Cannot open database` / `Invalid object name` |
+| Base de empresa con `Habilita = 0` en `pq_empresa` | migración se omite (no es error) |
+| SP con error de sintaxis (raro, indica binario corrupto) | `Incorrect syntax near...` |
+
+### Diagnóstico paso a paso
+
+**1. Verificar logs del agente:**
+```powershell
+Get-Content "C:\PaqSuite\PaqAgent\logs\agent*.log" -Tail 50
+```
+Buscar líneas con `Error`, `Exception` o `migration`.
+
+**2. Verificar permisos del usuario SQL:**
+
+Conectar a SQL Server Management Studio con el usuario configurado
+en `appsettings.local.json` y ejecutar:
+```sql
+-- Verificar acceso a la base diccionario
+USE [Diccionario_XXXXX_XXX]
+GO
+-- Verificar acceso a cada base de empresa habilitada
+USE [NOMBRE_EMPRESA]
+GO
+-- Verificar permisos de ejecución
+GRANT EXECUTE TO [usuario_sql]
+GRANT VIEW DEFINITION TO [usuario_sql]
+```
+
+**3. Verificar nombre de la base diccionario:**
+
+El campo `Database` en `SqlConnection` de `appsettings.local.json`
+debe ser exactamente el nombre de la base diccionario Tango
+(ej. `Diccionario_000205_012`), no el de una empresa.
+```json
+"SqlConnection": {
+  "Server": "SERVIDOR\\INSTANCIA",
+  "Database": "Diccionario_000205_012",
+  ...
+}
+```
+
+**4. Forzar re-aplicación de una migración:**
+
+Las migraciones se registran en la tabla `PaqMigrations` de la base
+diccionario. Si una migración quedó a medias, eliminar su registro
+para que el agente la reintente al próximo arranque:
+```sql
+USE [Diccionario_000205_012]
+DELETE FROM PaqMigrations
+WHERE migration_name = '2026_07_01_000003_create_paq_clientes_buscar.sql'
+```
+Luego reiniciar el servicio:
+```powershell
+Restart-Service PaqAgent
+```
+
+**5. Verificar que el SP quedó creado correctamente:**
+```sql
+USE [TEC_METAL_PRUEBA]  -- o la base de empresa correspondiente
+EXEC sp_helptext 'dbo.PAQ_Clientes_Buscar'
+```
+Si devuelve el código del SP, la migración se aplicó correctamente.
+
+### Permisos mínimos requeridos
+
+El usuario SQL configurado en `appsettings.local.json` necesita:
+
+| Permiso | Alcance |
+|---------|---------|
+| `db_datareader` | Base diccionario + todas las bases de empresa habilitadas |
+| `EXECUTE` | Base diccionario + todas las bases de empresa habilitadas |
+| `VIEW DEFINITION` | Base diccionario (para verificar objetos existentes) |
+| `CREATE PROCEDURE` | Base diccionario + todas las bases de empresa habilitadas |
+
+> **Nota:** `CREATE PROCEDURE` es necesario solo durante la primera
+> instalación y updates. Si la política de seguridad del cliente no
+> permite este permiso al usuario de aplicación, las migraciones
+> deben aplicarse manualmente con un usuario con más privilegios
+> antes de iniciar el servicio.
+
+### Puerto del servidor SQL no estándar
+
+Si SQL Server usa un puerto dinámico o no estándar, configurarlo
+en el campo `Server` con la sintaxis `Servidor,Puerto`:
+```json
+"SqlConnection": {
+  "Server": "SERVIDOR\\INSTANCIA,58851",
+  ...
+}
+```
+El instalador WinForms tiene un campo dedicado para el puerto.
+
+---
+
 ## 6. Documentación relacionada
 
 | Documento | Contenido |
