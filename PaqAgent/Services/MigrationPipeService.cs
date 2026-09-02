@@ -155,12 +155,17 @@ public class MigrationPipeService : BackgroundService
         CancellationToken stoppingToken)
     {
         _logger.LogInformation("Pipe: ejecutando comando 'status'.");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var response = await _migrationRunner.GetStatusAsync(stoppingToken);
+        sw.Stop();
+        _logger.LogInformation(
+            "Pipe: GetStatusAsync completado en {ElapsedMs}ms. BDs: {Count}",
+            sw.ElapsedMilliseconds,
+            response.Databases.Count);
         var json = JsonSerializer.Serialize(response);
         await writer.WriteLineAsync(json.AsMemory(), stoppingToken);
         _logger.LogInformation(
-            "Pipe: status respondido. BDs: {Count}, Pendientes totales: {Pending}",
-            response.Databases.Count,
+            "Pipe: status respondido. Pendientes totales: {Pending}",
             response.Databases.Sum(d => d.Pending));
     }
 

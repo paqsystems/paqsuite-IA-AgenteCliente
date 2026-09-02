@@ -55,14 +55,13 @@ public class MigrationPipeClient
         {
             await pipeClient.ConnectAsync(ConnectTimeoutMs, cancellationToken);
         }
-        catch (TimeoutException)
-        {
-            return null;   // agente no está corriendo o pipe no disponible
-        }
-        catch (Exception)
-        {
-            return null;
-        }
+        catch (TimeoutException) { return null; }
+        catch (Exception) { return null; }
+
+        // Timeout total de la operación: 60 segundos
+        using var timeoutCts = CancellationTokenSource
+            .CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(60));
 
         using var reader = new StreamReader(pipeClient, Encoding.UTF8, leaveOpen: true);
         await using var writer = new StreamWriter(pipeClient, Encoding.UTF8, leaveOpen: true)
@@ -70,9 +69,18 @@ public class MigrationPipeClient
             AutoFlush = true
         };
 
-        await writer.WriteLineAsync(commandJson.AsMemory(), cancellationToken);
+        await writer.WriteLineAsync(commandJson.AsMemory(), timeoutCts.Token);
 
-        var responseLine = await reader.ReadLineAsync(cancellationToken);
+        string? responseLine;
+        try
+        {
+            responseLine = await reader.ReadLineAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;  // timeout: el agente tardó más de 60s
+        }
+
         if (string.IsNullOrWhiteSpace(responseLine))
             return null;
 
