@@ -631,12 +631,12 @@ public sealed class MainForm : Form
                 return;
             }
 
-            _pipeClient = new MigrationPipeClient(settings.AgentId);
             _lblMigrationStatus.Text = "Consultando...";
             _btnCheckMigrations.Enabled = false;
             _btnRunMigrations.Enabled = false;
             _rtbMigrationDetail.Clear();
-
+            Application.DoEvents(); // fuerza repintado antes del await
+            _pipeClient = new MigrationPipeClient(settings.AgentId);
             var response = await _pipeClient.GetStatusAsync();
 
             if (response is null)

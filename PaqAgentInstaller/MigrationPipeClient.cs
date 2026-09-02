@@ -10,7 +10,7 @@ namespace PaqAgentInstaller;
 /// </summary>
 public class MigrationPipeClient
 {
-    private const int ConnectTimeoutMs = 5_000;
+    private const int ConnectTimeoutMs = 3_000;
 
     private readonly string _pipeName;
 
