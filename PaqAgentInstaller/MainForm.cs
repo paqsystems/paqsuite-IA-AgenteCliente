@@ -34,6 +34,12 @@ public sealed class MainForm : Form
     private Button _btnUpdate = null!;
     private ProgressBar _progressUpdate = null!;
     private RichTextBox _logUpdate = null!;
+    private Panel _pnlMigrations = null!;
+    private Label _lblMigrationStatus = null!;
+    private RichTextBox _rtbMigrationDetail = null!;
+    private Button _btnCheckMigrations = null!;
+    private Button _btnRunMigrations = null!;
+    private MigrationPipeClient? _pipeClient;
 
     private GitHubReleaseInfo? _pendingRelease;
     private string? _detectedInstallPath;
@@ -187,9 +193,10 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(12),
         };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -221,12 +228,73 @@ public sealed class MainForm : Form
         buttons.Controls.Add(_btnCheckUpdate);
         buttons.Controls.Add(_btnUpdate);
 
+        _pnlMigrations = new Panel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(0, 8, 0, 4),
+        };
+        var migrationsLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 4,
+        };
+        migrationsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        migrationsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        migrationsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        migrationsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        migrationsLayout.Controls.Add(new Label
+        {
+            Text = "Estado de migraciones:",
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold),
+            Padding = new Padding(0, 4, 0, 4),
+        }, 0, 0);
+
+        _lblMigrationStatus = new Label
+        {
+            Text = "No consultado aún",
+            AutoSize = true,
+            Padding = new Padding(0, 4, 0, 4),
+        };
+        migrationsLayout.Controls.Add(_lblMigrationStatus, 0, 1);
+
+        var migrationButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+        };
+        _btnCheckMigrations = new Button { Text = "Verificar migraciones", AutoSize = true };
+        _btnRunMigrations = new Button { Text = "Aplicar ahora", AutoSize = true, Enabled = false };
+        _btnCheckMigrations.Click += async (_, _) => await CheckMigrationsAsync();
+        _btnRunMigrations.Click += async (_, _) => await RunMigrationsAsync();
+        migrationButtons.Controls.Add(_btnCheckMigrations);
+        migrationButtons.Controls.Add(_btnRunMigrations);
+        migrationsLayout.Controls.Add(migrationButtons, 0, 2);
+
+        _rtbMigrationDetail = new RichTextBox
+        {
+            Dock = DockStyle.Top,
+            Height = 120,
+            ReadOnly = true,
+            Font = new Font("Consolas", 9F),
+            BorderStyle = BorderStyle.FixedSingle,
+            DetectUrls = false,
+        };
+        migrationsLayout.Controls.Add(_rtbMigrationDetail, 0, 3);
+        _pnlMigrations.Controls.Add(migrationsLayout);
+
         _progressUpdate = new ProgressBar { Dock = DockStyle.Top, Height = 22, Minimum = 0, Maximum = 100 };
         _logUpdate = CreateLogBox();
 
         root.Controls.Add(_lblInstalledVersion, 0, 0);
         root.Controls.Add(_lblAvailableVersion, 0, 1);
         root.Controls.Add(buttons, 0, 2);
+        root.Controls.Add(_pnlMigrations, 0, 3);
 
         var bottom = new TableLayoutPanel
         {
@@ -238,7 +306,7 @@ public sealed class MainForm : Form
         bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         bottom.Controls.Add(_progressUpdate, 0, 0);
         bottom.Controls.Add(_logUpdate, 0, 1);
-        root.Controls.Add(bottom, 0, 3);
+        root.Controls.Add(bottom, 0, 4);
 
         page.Controls.Add(root);
         return page;
@@ -518,6 +586,215 @@ public sealed class MainForm : Form
         {
             SetBusy(false);
         }
+    }
+
+    private async Task CheckMigrationsAsync()
+    {
+        try
+        {
+            var installPath = ResolveInstallPath();
+            if (!Directory.Exists(installPath))
+            {
+                MessageBox.Show(
+                    this,
+                    "No hay una instalación detectada.",
+                    "Verificar migraciones",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            AgentSettings settings;
+            try
+            {
+                settings = _settingsService.ReadSettings(installPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    $"No se pudo leer la configuración del agente: {ex.Message}",
+                    "Verificar migraciones",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.AgentId))
+            {
+                MessageBox.Show(
+                    this,
+                    "No se pudo leer la configuración del agente.",
+                    "Verificar migraciones",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            _pipeClient = new MigrationPipeClient(settings.AgentId);
+            _lblMigrationStatus.Text = "Consultando...";
+            _btnCheckMigrations.Enabled = false;
+            _btnRunMigrations.Enabled = false;
+            _rtbMigrationDetail.Clear();
+
+            var response = await _pipeClient.GetStatusAsync();
+
+            if (response is null)
+            {
+                _lblMigrationStatus.Text = "No se pudo conectar con el agente. ¿Está corriendo?";
+                _rtbMigrationDetail.Clear();
+                return;
+            }
+
+            if (!response.Success)
+            {
+                _lblMigrationStatus.Text = $"Error: {response.Error}";
+                return;
+            }
+
+            var totalPending = response.Databases.Sum(d => d.Pending);
+            if (totalPending == 0)
+            {
+                _lblMigrationStatus.Text = "✓ Todas las migraciones aplicadas";
+                _btnRunMigrations.Enabled = false;
+            }
+            else
+            {
+                _lblMigrationStatus.Text = $"⚠ {totalPending} migración(es) pendiente(s)";
+                _btnRunMigrations.Enabled = true;
+            }
+
+            RenderMigrationStatusDetail(response);
+        }
+        catch (Exception ex)
+        {
+            _lblMigrationStatus.Text = $"Error: {ex.Message}";
+            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _btnCheckMigrations.Enabled = true;
+        }
+    }
+
+    private async Task RunMigrationsAsync()
+    {
+        if (_pipeClient is null)
+            return;
+
+        var confirm = MessageBox.Show(
+            this,
+            "¿Aplicar las migraciones pendientes ahora?\nEl agente las ejecutará sin reiniciarse.",
+            "Confirmar",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+        if (confirm != DialogResult.Yes)
+            return;
+
+        try
+        {
+            _btnRunMigrations.Enabled = false;
+            _btnCheckMigrations.Enabled = false;
+            _lblMigrationStatus.Text = "Aplicando migraciones...";
+
+            var response = await _pipeClient.RunAsync();
+
+            if (response is null)
+            {
+                _lblMigrationStatus.Text = "No se pudo conectar con el agente.";
+                return;
+            }
+
+            RenderMigrationRunDetail(response);
+
+            if (response.Success)
+            {
+                _lblMigrationStatus.Text = "✓ Migraciones aplicadas correctamente";
+                MessageBox.Show(
+                    this,
+                    "Migraciones aplicadas.",
+                    "Éxito",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            else
+            {
+                _lblMigrationStatus.Text = "⚠ Algunas migraciones fallaron. Revisá el detalle.";
+                MessageBox.Show(
+                    this,
+                    "Hubo errores al aplicar migraciones. Revisá el detalle.",
+                    "Advertencia",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            _lblMigrationStatus.Text = $"Error: {ex.Message}";
+            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _btnCheckMigrations.Enabled = true;
+            // Si el run falló por conexión (response null), rehabilitar
+            // el botón Aplicar para que el usuario pueda reintentar
+            // tras una nueva verificación. Si el run completó (con o sin
+            // errores), _btnRunMigrations queda deshabilitado hasta
+            // la próxima verificación — ese caso lo maneja el flujo normal.
+            if (_lblMigrationStatus.Text.StartsWith("No se pudo conectar"))
+                _btnRunMigrations.Enabled = true;
+        }
+    }
+
+    private void RenderMigrationStatusDetail(MigrationStatusResponse response)
+    {
+        _rtbMigrationDetail.Clear();
+        foreach (var db in response.Databases)
+        {
+            var prefix = $"[{db.DatabaseType}]".PadRight(13);
+            if (!string.IsNullOrWhiteSpace(db.Error))
+            {
+                AppendMigrationDetail($"{prefix}{db.DatabaseName} — ERROR: {db.Error}", Color.Red);
+                continue;
+            }
+
+            AppendMigrationDetail(
+                $"{prefix}{db.DatabaseName} — {db.Applied} aplicadas, {db.Pending} pendientes");
+            foreach (var name in db.PendingNames)
+                AppendMigrationDetail($"    {name}");
+        }
+    }
+
+    private void RenderMigrationRunDetail(MigrationRunResponse response)
+    {
+        _rtbMigrationDetail.Clear();
+        foreach (var db in response.Databases)
+        {
+            var prefix = $"[{db.DatabaseType}]".PadRight(13);
+            if (!string.IsNullOrWhiteSpace(db.Error))
+            {
+                AppendMigrationDetail($"{prefix}{db.DatabaseName} — ERROR: {db.Error}", Color.Red);
+                continue;
+            }
+
+            AppendMigrationDetail(
+                $"{prefix}{db.DatabaseName} — aplicadas: {db.Applied}, omitidas: {db.Skipped}, fallidas: {db.Failed}");
+
+            foreach (var name in db.AppliedNames)
+                AppendMigrationDetail($"    + {name}");
+
+            foreach (var name in db.FailedNames)
+                AppendMigrationDetail($"    x {name}", Color.Red);
+        }
+    }
+
+    private void AppendMigrationDetail(string text, Color? color = null)
+    {
+        _rtbMigrationDetail.SelectionStart = _rtbMigrationDetail.TextLength;
+        _rtbMigrationDetail.SelectionLength = 0;
+        _rtbMigrationDetail.SelectionColor = color ?? _rtbMigrationDetail.ForeColor;
+        _rtbMigrationDetail.AppendText(text + Environment.NewLine);
+        _rtbMigrationDetail.SelectionColor = _rtbMigrationDetail.ForeColor;
     }
 
     private AgentSettings CollectSettingsFromForm() => new()

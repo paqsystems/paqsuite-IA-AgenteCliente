@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PaqAgent.Configuration;
+using PaqAgent.Models;
 
 namespace PaqAgent.Database;
 
@@ -128,6 +129,373 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         }
 
         _logger.LogInformation("Migraciones SQL embebidas finalizadas");
+    }
+
+    public async Task<MigrationStatusResponse> GetStatusAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var results = new List<DatabaseMigrationStatus>();
+            var dictionaryScripts = SqlScriptLoader.ListDictionaryMigrationResourceNames();
+            var dictionaryName = await ResolveDictionaryDatabaseNameAsync(cancellationToken);
+
+            try
+            {
+                results.Add(await GetDatabaseStatusAsync(
+                    dictionaryScripts,
+                    dictionaryName,
+                    "dictionary",
+                    databaseOverride: null,
+                    cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudo consultar el estado de migraciones del diccionario {Database}",
+                    dictionaryName);
+                results.Add(new DatabaseMigrationStatus(
+                    dictionaryName,
+                    "dictionary",
+                    Applied: 0,
+                    Pending: 0,
+                    PendingNames: [],
+                    Error: ex.Message));
+            }
+
+            var companyScripts = SqlScriptLoader.ListCompanyMigrationResourceNames();
+            if (companyScripts.Count == 0)
+                return new MigrationStatusResponse(true, null, results);
+
+            string nombreBdColumn;
+            IReadOnlyList<string> operativeDatabases;
+            try
+            {
+                nombreBdColumn = await ResolveNombreBdColumnAsync(cancellationToken)
+                    ?? throw new InvalidOperationException(
+                        "No se encontro la columna NombreBD ni nombre_bd en dbo.pq_empresa del diccionario.");
+                operativeDatabases = await ListOperativeDatabaseNamesAsync(nombreBdColumn, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo listar las bases operativas para el estado de migraciones");
+                return new MigrationStatusResponse(false, ex.Message, []);
+            }
+
+            foreach (var nombreBd in operativeDatabases)
+            {
+                try
+                {
+                    results.Add(await GetDatabaseStatusAsync(
+                        companyScripts,
+                        nombreBd,
+                        "company",
+                        nombreBd,
+                        cancellationToken));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "No se pudo consultar el estado de migraciones en {NombreBD}",
+                        nombreBd);
+                    results.Add(new DatabaseMigrationStatus(
+                        nombreBd,
+                        "company",
+                        Applied: 0,
+                        Pending: 0,
+                        PendingNames: [],
+                        Error: ex.Message));
+                }
+            }
+
+            return new MigrationStatusResponse(true, null, results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al consultar el estado de migraciones");
+            return new MigrationStatusResponse(false, ex.Message, []);
+        }
+    }
+
+    public async Task<MigrationRunResponse> RunAndReportAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!_settings.Enabled)
+        {
+            _logger.LogInformation("Migraciones SQL embebidas deshabilitadas (SqlMigrations:Enabled=false)");
+            return new MigrationRunResponse(
+                false,
+                "Migraciones SQL embebidas deshabilitadas (SqlMigrations:Enabled=false)",
+                []);
+        }
+
+        var results = new List<DatabaseMigrationResult>();
+        var hadBdError = false;
+
+        var dictionaryScripts = SqlScriptLoader.ListDictionaryMigrationResourceNames();
+        var dictionaryName = await ResolveDictionaryDatabaseNameAsync(cancellationToken);
+
+        _logger.LogInformation("RunAndReport: fase diccionario en {Database}", dictionaryName);
+        try
+        {
+            results.Add(await ApplyMigrationsAndReportAsync(
+                dictionaryScripts,
+                dictionaryName,
+                "dictionary",
+                databaseOverride: null,
+                cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            hadBdError = true;
+            _logger.LogWarning(
+                ex,
+                "No se pudieron aplicar migraciones del diccionario {Database}: {Message}",
+                dictionaryName,
+                ex.Message);
+            results.Add(new DatabaseMigrationResult(
+                dictionaryName,
+                "dictionary",
+                Applied: 0,
+                Skipped: 0,
+                Failed: 0,
+                AppliedNames: [],
+                FailedNames: [],
+                Error: ex.Message));
+        }
+
+        var companyScripts = SqlScriptLoader.ListCompanyMigrationResourceNames();
+        if (companyScripts.Count == 0)
+        {
+            var dictionaryOnlySuccess = !hadBdError && results.All(r => r.Failed == 0 && r.Error is null);
+            return new MigrationRunResponse(
+                dictionaryOnlySuccess,
+                dictionaryOnlySuccess ? null : "Una o más bases tuvieron errores al aplicar migraciones.",
+                results);
+        }
+
+        _logger.LogInformation(
+            "RunAndReport: fase company, {Count} migraciones embebidas",
+            companyScripts.Count);
+
+        try
+        {
+            var nombreBdColumn = await ResolveNombreBdColumnAsync(cancellationToken)
+                ?? throw new InvalidOperationException(
+                    "No se encontro la columna NombreBD ni nombre_bd en dbo.pq_empresa del diccionario.");
+            var operativeDatabases = await ListOperativeDatabaseNamesAsync(nombreBdColumn, cancellationToken);
+
+            foreach (var nombreBd in operativeDatabases)
+            {
+                _logger.LogInformation("RunAndReport: aplicando migraciones company en {NombreBD}", nombreBd);
+                try
+                {
+                    results.Add(await ApplyMigrationsAndReportAsync(
+                        companyScripts,
+                        nombreBd,
+                        "company",
+                        nombreBd,
+                        cancellationToken));
+                }
+                catch (Exception ex)
+                {
+                    hadBdError = true;
+                    _logger.LogWarning(
+                        ex,
+                        "No se pudieron aplicar migraciones company en {NombreBD}: {Message}",
+                        nombreBd,
+                        ex.Message);
+                    results.Add(new DatabaseMigrationResult(
+                        nombreBd,
+                        "company",
+                        Applied: 0,
+                        Skipped: 0,
+                        Failed: 0,
+                        AppliedNames: [],
+                        FailedNames: [],
+                        Error: ex.Message));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            hadBdError = true;
+            _logger.LogWarning(ex, "No se pudo listar las bases operativas para aplicar migraciones");
+            return new MigrationRunResponse(false, ex.Message, results);
+        }
+
+        var success = !hadBdError && results.All(r => r.Failed == 0 && r.Error is null);
+        return new MigrationRunResponse(
+            success,
+            success ? null : "Una o más bases tuvieron errores al aplicar migraciones.",
+            results);
+    }
+
+    private async Task<string> ResolveDictionaryDatabaseNameAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var names = await _sqlExecutor.QueryStringColumnAsync(
+                "SELECT DB_NAME() AS NombreBD",
+                "NombreBD",
+                _settings.CommandTimeoutSeconds,
+                databaseOverride: null,
+                cancellationToken);
+            var name = names.FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
+            return string.IsNullOrWhiteSpace(name) ? "diccionario" : name;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo resolver el nombre de la BD diccionario; se usa 'diccionario'");
+            return "diccionario";
+        }
+    }
+
+    private async Task<DatabaseMigrationStatus> GetDatabaseStatusAsync(
+        IReadOnlyList<string> resourceNames,
+        string databaseName,
+        string databaseType,
+        string? databaseOverride,
+        CancellationToken cancellationToken)
+    {
+        await EnsureSchemaAsync(databaseOverride, cancellationToken);
+        var appliedMigrations = await LoadAppliedMigrationsAsync(databaseOverride, cancellationToken);
+
+        var pendingNames = new List<string>();
+        var appliedCount = 0;
+
+        foreach (var resourceName in resourceNames)
+        {
+            var migrationName = SqlScriptLoader.GetMigrationFileName(resourceName);
+            var scriptContent = SqlScriptLoader.ReadEmbeddedMigrationContent(resourceName);
+            var checksum = ComputeSha256Hex(scriptContent);
+
+            if (appliedMigrations.TryGetValue(migrationName, out var storedChecksum)
+                && string.Equals(storedChecksum, checksum, StringComparison.OrdinalIgnoreCase))
+            {
+                appliedCount++;
+                continue;
+            }
+
+            pendingNames.Add(migrationName);
+        }
+
+        return new DatabaseMigrationStatus(
+            databaseName,
+            databaseType,
+            appliedCount,
+            pendingNames.Count,
+            pendingNames,
+            Error: null);
+    }
+
+    private async Task<DatabaseMigrationResult> ApplyMigrationsAndReportAsync(
+        IReadOnlyList<string> resourceNames,
+        string databaseName,
+        string databaseType,
+        string? databaseOverride,
+        CancellationToken cancellationToken)
+    {
+        var appliedNames = new List<string>();
+        var failedNames = new List<string>();
+        var skippedCount = 0;
+        var batch = 1;
+
+        await EnsureSchemaAsync(databaseOverride, cancellationToken);
+        var appliedMigrations = await LoadAppliedMigrationsAsync(databaseOverride, cancellationToken);
+
+        foreach (var resourceName in resourceNames)
+        {
+            var migrationName = SqlScriptLoader.GetMigrationFileName(resourceName);
+            var scriptContent = SqlScriptLoader.ReadEmbeddedMigrationContent(resourceName);
+            var checksum = ComputeSha256Hex(scriptContent);
+
+            if (appliedMigrations.TryGetValue(migrationName, out var storedChecksum)
+                && string.Equals(storedChecksum, checksum, StringComparison.OrdinalIgnoreCase))
+            {
+                skippedCount++;
+                continue;
+            }
+
+            var isReapply = appliedMigrations.ContainsKey(migrationName);
+
+            try
+            {
+                foreach (var batchSql in SplitByGo(scriptContent))
+                {
+                    if (string.IsNullOrWhiteSpace(batchSql))
+                        continue;
+
+                    await _sqlExecutor.ExecuteNonQueryAsync(
+                        batchSql,
+                        _settings.CommandTimeoutSeconds,
+                        databaseOverride,
+                        cancellationToken);
+                }
+
+                if (databaseOverride is not null)
+                {
+                    await EnsurePrimaryObjectExistsAsync(
+                        migrationName,
+                        scriptContent,
+                        databaseOverride,
+                        cancellationToken);
+                }
+
+                if (isReapply)
+                {
+                    await _sqlExecutor.ExecuteNonQueryAsync(
+                        UpdateMigrationSql,
+                        new Dictionary<string, object?>
+                        {
+                            ["migration"] = migrationName,
+                            ["checksum"] = checksum
+                        },
+                        _settings.CommandTimeoutSeconds,
+                        databaseOverride,
+                        cancellationToken);
+                }
+                else
+                {
+                    await _sqlExecutor.ExecuteNonQueryAsync(
+                        InsertMigrationSql,
+                        new Dictionary<string, object?>
+                        {
+                            ["migration"] = migrationName,
+                            ["batch"] = batch,
+                            ["checksum_sha256"] = checksum
+                        },
+                        _settings.CommandTimeoutSeconds,
+                        databaseOverride,
+                        cancellationToken);
+                }
+
+                appliedMigrations[migrationName] = checksum;
+                appliedNames.Add(migrationName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Error al aplicar migracion {Migration} en {Database}: {Message}",
+                    migrationName,
+                    databaseName,
+                    ex.Message);
+                failedNames.Add(migrationName);
+            }
+        }
+
+        return new DatabaseMigrationResult(
+            databaseName,
+            databaseType,
+            appliedNames.Count,
+            skippedCount,
+            failedNames.Count,
+            appliedNames,
+            failedNames,
+            Error: null);
     }
 
     private async Task RunMigrationsAsync(

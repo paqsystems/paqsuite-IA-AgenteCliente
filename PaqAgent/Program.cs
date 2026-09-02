@@ -24,6 +24,8 @@ builder.Services.AddSerilog();
 builder.Services.Configure<AgentSettings>(builder.Configuration.GetSection(AgentSettings.SectionName));
 builder.Services.Configure<SqlConnectionSettings>(builder.Configuration.GetSection(SqlConnectionSettings.SectionName));
 builder.Services.Configure<SqlMigrationSettings>(builder.Configuration.GetSection(SqlMigrationSettings.SectionName));
+builder.Services.Configure<PipeSettings>(
+    builder.Configuration.GetSection(PipeSettings.SectionName));
 builder.Services.Configure<OperationSettings>(builder.Configuration.GetSection(OperationSettings.SectionName));
 
 builder.Services.AddSingleton<TokenProvider>();
@@ -39,6 +41,7 @@ builder.Services.AddSingleton<IAgentConnection, SignalRAgentConnection>();
 
 builder.Services.AddHostedService<AgentWorker>();
 builder.Services.AddHostedService<HeartbeatService>();
+builder.Services.AddHostedService<MigrationPipeService>();
 
 var host = builder.Build();
 
