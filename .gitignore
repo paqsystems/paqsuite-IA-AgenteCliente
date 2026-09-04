@@ -6,6 +6,11 @@
 [Oo]ut/
 publish/
 
+## Nested publish leftovers (not the intended publish/ output)
+publish-apply-*/
+publish-release/
+publish-release-*/
+
 ## IDE
 .vs/
 *.user
