@@ -53,7 +53,8 @@ public class MigrationPipeClient
 
         try
         {
-            await pipeClient.ConnectAsync(ConnectTimeoutMs, cancellationToken);
+            await pipeClient.ConnectAsync(ConnectTimeoutMs, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (TimeoutException) { return null; }
         catch (Exception) { return null; }
@@ -69,12 +70,14 @@ public class MigrationPipeClient
             AutoFlush = true
         };
 
-        await writer.WriteLineAsync(commandJson.AsMemory(), timeoutCts.Token);
+        await writer.WriteLineAsync(commandJson.AsMemory(), timeoutCts.Token)
+            .ConfigureAwait(false);
 
         string? responseLine;
         try
         {
-            responseLine = await reader.ReadLineAsync(timeoutCts.Token);
+            responseLine = await reader.ReadLineAsync(timeoutCts.Token)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
