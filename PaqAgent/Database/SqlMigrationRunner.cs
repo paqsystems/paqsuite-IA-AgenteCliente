@@ -136,18 +136,21 @@ public class SqlMigrationRunner : ISqlMigrationRunner
     {
         try
         {
+            _logger.LogInformation("GetStatusAsync: inicio");
             var results = new List<DatabaseMigrationStatus>();
             var dictionaryScripts = SqlScriptLoader.ListDictionaryMigrationResourceNames();
             var dictionaryName = await ResolveDictionaryDatabaseNameAsync(cancellationToken);
 
             try
             {
+                _logger.LogInformation("GetStatusAsync: consultando diccionario {Db}", dictionaryName);
                 results.Add(await GetDatabaseStatusAsync(
                     dictionaryScripts,
                     dictionaryName,
                     "dictionary",
                     databaseOverride: null,
                     cancellationToken));
+                _logger.LogInformation("GetStatusAsync: diccionario OK");
             }
             catch (Exception ex)
             {
@@ -183,16 +186,19 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                 return new MigrationStatusResponse(false, ex.Message, []);
             }
 
+            _logger.LogInformation("GetStatusAsync: consultando {N} BDs operativas", operativeDatabases.Count);
             foreach (var nombreBd in operativeDatabases)
             {
                 try
                 {
+                    _logger.LogInformation("GetStatusAsync: consultando company {Db}", nombreBd);
                     results.Add(await GetDatabaseStatusAsync(
                         companyScripts,
                         nombreBd,
                         "company",
                         nombreBd,
                         cancellationToken));
+                    _logger.LogInformation("GetStatusAsync: company {Db} OK", nombreBd);
                 }
                 catch (Exception ex)
                 {
@@ -360,8 +366,13 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         string? databaseOverride,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation("GetDatabaseStatus: EnsureSchema en {Db}", databaseOverride ?? "diccionario");
         await EnsureSchemaAsync(databaseOverride, cancellationToken);
+        _logger.LogInformation("GetDatabaseStatus: EnsureSchema OK en {Db}", databaseOverride ?? "diccionario");
+        _logger.LogInformation("GetDatabaseStatus: LoadApplied en {Db}", databaseOverride ?? "diccionario");
         var appliedMigrations = await LoadAppliedMigrationsAsync(databaseOverride, cancellationToken);
+        _logger.LogInformation("GetDatabaseStatus: LoadApplied OK en {Db} — {N} aplicadas",
+            databaseOverride ?? "diccionario", appliedMigrations.Count);
 
         var pendingNames = new List<string>();
         var appliedCount = 0;
