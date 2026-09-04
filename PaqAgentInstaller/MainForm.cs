@@ -637,6 +637,7 @@ public sealed class MainForm : Form
             _rtbMigrationDetail.Clear();
             Application.DoEvents(); // fuerza repintado antes del await
             _pipeClient = new MigrationPipeClient(settings.AgentId);
+            // No usar Task.Run + GetAwaiter().GetResult() — deadlock en named pipes Windows
             var response = await _pipeClient.GetStatusAsync();
 
             if (response is null)
@@ -697,6 +698,7 @@ public sealed class MainForm : Form
             _btnCheckMigrations.Enabled = false;
             _lblMigrationStatus.Text = "Aplicando migraciones...";
 
+            // No usar Task.Run + GetAwaiter().GetResult() — deadlock en named pipes Windows
             var response = await _pipeClient.RunAsync();
 
             if (response is null)
