@@ -59,10 +59,10 @@ public class MigrationPipeClient
         catch (TimeoutException) { return null; }
         catch (Exception) { return null; }
 
-        // Timeout total de la operación: 60 segundos
+        // Timeout total de la operación: 5 minutos
         using var timeoutCts = CancellationTokenSource
             .CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(60));
+        timeoutCts.CancelAfter(TimeSpan.FromMinutes(5));
 
         using var reader = new StreamReader(pipeClient, Encoding.UTF8, leaveOpen: true);
         await using var writer = new StreamWriter(pipeClient, Encoding.UTF8, leaveOpen: true)
@@ -79,9 +79,16 @@ public class MigrationPipeClient
             responseLine = await reader.ReadLineAsync(timeoutCts.Token)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return null;  // timeout: el agente tardó más de 60s
+            // Fue nuestro timeout de 5 min, no una cancelación externa
+            const string message =
+                "El agente no respondió en el tiempo esperado (5 min). Las migraciones pueden estar tardando — reintentá en unos segundos.";
+            if (typeof(T) == typeof(MigrationStatusResponse))
+                return (T)(object)new MigrationStatusResponse(false, message, []);
+            if (typeof(T) == typeof(MigrationRunResponse))
+                return (T)(object)new MigrationRunResponse(false, message, []);
+            return null;
         }
 
         if (string.IsNullOrWhiteSpace(responseLine))

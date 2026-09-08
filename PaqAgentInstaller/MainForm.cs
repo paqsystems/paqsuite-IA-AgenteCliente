@@ -649,7 +649,9 @@ public sealed class MainForm : Form
 
             if (!response.Success)
             {
-                _lblMigrationStatus.Text = $"Error: {response.Error}";
+                _lblMigrationStatus.Text = $"⚠ {response.Error}";
+                _rtbMigrationDetail.Clear();
+                AppendMigrationDetail(response.Error ?? "Error desconocido.", Color.Orange);
                 return;
             }
 
