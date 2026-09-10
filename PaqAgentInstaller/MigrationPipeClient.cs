@@ -71,6 +71,8 @@ public class MigrationPipeClient
 
         await writer.WriteLineAsync(commandJson.AsMemory(), timeoutCts.Token)
             .ConfigureAwait(false);
+        await writer.FlushAsync(timeoutCts.Token)
+            .ConfigureAwait(false);
 
         using var reader = new StreamReader(pipeClient, Encoding.UTF8, bufferSize: 1, leaveOpen: true);
 
