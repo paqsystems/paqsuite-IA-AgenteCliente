@@ -91,6 +91,11 @@ public class MigrationPipeService : BackgroundService
                 AutoFlush = true
             };
 
+            // Handshake: el servidor avisa que está listo
+            await writer.WriteLineAsync("READY".AsMemory(), stoppingToken);
+            await writer.FlushAsync(stoppingToken);
+            _logger.LogInformation("Pipe: handshake READY enviado.");
+
             // Leer una línea de comando (JSON)
             var line = await reader.ReadLineAsync(stoppingToken);
             if (string.IsNullOrWhiteSpace(line))

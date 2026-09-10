@@ -64,16 +64,22 @@ public class MigrationPipeClient
             .CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromMinutes(5));
 
-        await using var writer = new StreamWriter(pipeClient, Encoding.UTF8, leaveOpen: true)
+        // Esperar handshake del servidor
+        using (var handshakeReader = new StreamReader(pipeClient, Encoding.UTF8, bufferSize: 1, leaveOpen: true))
         {
-            AutoFlush = true
-        };
+            var handshake = await handshakeReader.ReadLineAsync(timeoutCts.Token).ConfigureAwait(false);
+            // handshake debería ser "READY"
+            _ = handshake;
+        }
 
-        await writer.WriteLineAsync(commandJson.AsMemory(), timeoutCts.Token)
+        // Escribir comando directamente al pipe sin StreamWriter
+        var commandBytes = Encoding.UTF8.GetBytes(commandJson + "\n");
+        await pipeClient.WriteAsync(commandBytes, timeoutCts.Token)
             .ConfigureAwait(false);
-        await writer.FlushAsync(timeoutCts.Token)
+        await pipeClient.FlushAsync(timeoutCts.Token)
             .ConfigureAwait(false);
 
+        // Leer respuesta directamente del pipe sin StreamReader
         using var reader = new StreamReader(pipeClient, Encoding.UTF8, bufferSize: 1, leaveOpen: true);
 
         string? responseLine;
