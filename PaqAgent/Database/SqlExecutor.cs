@@ -218,11 +218,13 @@ public class SqlExecutor : ISqlExecutor
 
         string? databaseOverride = null,
 
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+
+        int? connectionTimeoutOverride = null)
 
     {
 
-        await ExecuteNonQueryAsync(sql, new Dictionary<string, object?>(), timeoutSeconds, databaseOverride, cancellationToken);
+        await ExecuteNonQueryAsync(sql, new Dictionary<string, object?>(), timeoutSeconds, databaseOverride, cancellationToken, connectionTimeoutOverride);
 
     }
 
@@ -238,11 +240,13 @@ public class SqlExecutor : ISqlExecutor
 
         string? databaseOverride = null,
 
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+
+        int? connectionTimeoutOverride = null)
 
     {
 
-        await using var connection = new SqlConnection(ResolveConnectionString(databaseOverride));
+        await using var connection = new SqlConnection(ResolveConnectionString(databaseOverride, connectionTimeoutOverride));
 
         await connection.OpenAsync(cancellationToken);
 
@@ -288,11 +292,13 @@ public class SqlExecutor : ISqlExecutor
 
         string? databaseOverride = null,
 
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+
+        int? connectionTimeoutOverride = null)
 
     {
 
-        await using var connection = new SqlConnection(ResolveConnectionString(databaseOverride));
+        await using var connection = new SqlConnection(ResolveConnectionString(databaseOverride, connectionTimeoutOverride));
 
         await connection.OpenAsync(cancellationToken);
 
@@ -340,10 +346,10 @@ public class SqlExecutor : ISqlExecutor
 
 
 
-    private string ResolveConnectionString(string? databaseOverride) =>
-        string.IsNullOrWhiteSpace(databaseOverride)
-            ? _settings.BuildConnectionString()
-            : _settings.BuildConnectionString(databaseOverride);
+    private string ResolveConnectionString(string? databaseOverride, int? connectionTimeoutOverride = null) =>
+        _settings.BuildConnectionString(
+            string.IsNullOrWhiteSpace(databaseOverride) ? _settings.Database : databaseOverride,
+            connectionTimeoutOverride);
 
 
 

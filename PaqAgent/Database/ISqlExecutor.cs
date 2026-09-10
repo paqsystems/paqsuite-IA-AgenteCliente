@@ -46,7 +46,9 @@ public interface ISqlExecutor
 
         string? databaseOverride = null,
 
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+
+        int? connectionTimeoutOverride = null);
 
 
 
@@ -60,7 +62,9 @@ public interface ISqlExecutor
 
         string? databaseOverride = null,
 
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+
+        int? connectionTimeoutOverride = null);
 
 
 
@@ -74,7 +78,9 @@ public interface ISqlExecutor
 
         string? databaseOverride = null,
 
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+
+        int? connectionTimeoutOverride = null);
 
 }
 

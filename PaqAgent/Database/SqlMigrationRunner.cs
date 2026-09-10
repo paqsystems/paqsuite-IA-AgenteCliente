@@ -152,6 +152,10 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                     cancellationToken));
                 _logger.LogInformation("GetStatusAsync: diccionario OK");
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(
@@ -180,6 +184,10 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                         "No se encontro la columna NombreBD ni nombre_bd en dbo.pq_empresa del diccionario.");
                 operativeDatabases = await ListOperativeDatabaseNamesAsync(nombreBdColumn, cancellationToken);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "No se pudo listar las bases operativas para el estado de migraciones");
@@ -200,6 +208,10 @@ public class SqlMigrationRunner : ISqlMigrationRunner
                         cancellationToken));
                     _logger.LogInformation("GetStatusAsync: company {Db} OK", nombreBd);
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(
@@ -217,6 +229,10 @@ public class SqlMigrationRunner : ISqlMigrationRunner
             }
 
             return new MigrationStatusResponse(true, null, results);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -367,10 +383,10 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("GetDatabaseStatus: EnsureSchema en {Db}", databaseOverride ?? "diccionario");
-        await EnsureSchemaAsync(databaseOverride, cancellationToken);
+        await EnsureSchemaAsync(databaseOverride, cancellationToken, connectionTimeoutOverride: 5);
         _logger.LogInformation("GetDatabaseStatus: EnsureSchema OK en {Db}", databaseOverride ?? "diccionario");
         _logger.LogInformation("GetDatabaseStatus: LoadApplied en {Db}", databaseOverride ?? "diccionario");
-        var appliedMigrations = await LoadAppliedMigrationsAsync(databaseOverride, cancellationToken);
+        var appliedMigrations = await LoadAppliedMigrationsAsync(databaseOverride, cancellationToken, connectionTimeoutOverride: 5);
         _logger.LogInformation("GetDatabaseStatus: LoadApplied OK en {Db} — {N} aplicadas",
             databaseOverride ?? "diccionario", appliedMigrations.Count);
 
@@ -642,14 +658,16 @@ public class SqlMigrationRunner : ISqlMigrationRunner
 
     private async Task<Dictionary<string, string?>> LoadAppliedMigrationsAsync(
         string? databaseOverride,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? connectionTimeoutOverride = null)
     {
         var rows = await _sqlExecutor.QueryStringColumnAsync(
             AppliedMigrationsSql,
             "migration",
             _settings.CommandTimeoutSeconds,
             databaseOverride,
-            cancellationToken);
+            cancellationToken,
+            connectionTimeoutOverride);
 
         var appliedMigrations = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
@@ -897,13 +915,17 @@ public class SqlMigrationRunner : ISqlMigrationRunner
         return char.ToUpperInvariant(lower[0]) + lower[1..];
     }
 
-    private async Task EnsureSchemaAsync(string? databaseOverride, CancellationToken cancellationToken)
+    private async Task EnsureSchemaAsync(
+        string? databaseOverride,
+        CancellationToken cancellationToken,
+        int? connectionTimeoutOverride = null)
     {
         await _sqlExecutor.ExecuteNonQueryAsync(
             EnsureSchemaSql,
             _settings.CommandTimeoutSeconds,
             databaseOverride,
-            cancellationToken);
+            cancellationToken,
+            connectionTimeoutOverride);
     }
 
     private static string ComputeSha256Hex(string content)

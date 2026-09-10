@@ -155,8 +155,21 @@ public class MigrationPipeService : BackgroundService
         CancellationToken stoppingToken)
     {
         _logger.LogInformation("Pipe: ejecutando comando 'status'.");
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        cts.CancelAfter(TimeSpan.FromMinutes(4));
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var response = await _migrationRunner.GetStatusAsync(stoppingToken);
+        MigrationStatusResponse response;
+        try
+        {
+            response = await _migrationRunner.GetStatusAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+        {
+            response = new MigrationStatusResponse(
+                false,
+                "La consulta de migraciones superó el tiempo máximo (4 min).",
+                []);
+        }
         sw.Stop();
         _logger.LogInformation(
             "Pipe: GetStatusAsync completado en {ElapsedMs}ms. BDs: {Count}",

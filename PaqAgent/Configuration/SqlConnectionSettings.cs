@@ -16,7 +16,7 @@ public class SqlConnectionSettings
 
     public string BuildConnectionString() => BuildConnectionString(Database);
 
-    public string BuildConnectionString(string databaseOverride)
+    public string BuildConnectionString(string databaseOverride, int? connectionTimeoutOverride = null)
     {
         var port = Port?.Trim() ?? "";
         var dataSource = string.IsNullOrWhiteSpace(port) || port == "1433"
@@ -31,7 +31,7 @@ public class SqlConnectionSettings
             Password = Password,
             Encrypt = Encrypt,
             TrustServerCertificate = TrustServerCertificate,
-            ConnectTimeout = ConnectionTimeoutSeconds
+            ConnectTimeout = connectionTimeoutOverride ?? ConnectionTimeoutSeconds
         };
         return builder.ConnectionString;
     }
