@@ -6,9 +6,9 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.0.27</Version>
-    <AssemblyVersion>1.0.27</AssemblyVersion>
-    <FileVersion>1.0.27</FileVersion>
+    <Version>1.0.28</Version>
+    <AssemblyVersion>1.0.28</AssemblyVersion>
+    <FileVersion>1.0.28</FileVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>

@@ -6,9 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PaqAgent</RootNamespace>
     <AssemblyName>PaqAgent</AssemblyName>
-    <Version>1.0.27</Version>
-    <AssemblyVersion>1.0.27</AssemblyVersion>
-    <FileVersion>1.0.27</FileVersion>
+    <Version>1.0.28</Version>
+    <AssemblyVersion>1.0.28</AssemblyVersion>
+    <FileVersion>1.0.28</FileVersion>
     <Authors>PaqSystems</Authors>
     <Description>Agente local PAQSuite IA Tango - Worker Service para consultas SQL Server via Gateway</Description>
   </PropertyGroup>
