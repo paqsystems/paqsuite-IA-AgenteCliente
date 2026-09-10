@@ -64,7 +64,6 @@ public class MigrationPipeClient
             .CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromMinutes(5));
 
-        using var reader = new StreamReader(pipeClient, Encoding.UTF8, leaveOpen: true);
         await using var writer = new StreamWriter(pipeClient, Encoding.UTF8, leaveOpen: true)
         {
             AutoFlush = true
@@ -72,6 +71,8 @@ public class MigrationPipeClient
 
         await writer.WriteLineAsync(commandJson.AsMemory(), timeoutCts.Token)
             .ConfigureAwait(false);
+
+        using var reader = new StreamReader(pipeClient, Encoding.UTF8, bufferSize: 1, leaveOpen: true);
 
         string? responseLine;
         try
