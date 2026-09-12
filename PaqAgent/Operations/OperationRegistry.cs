@@ -73,6 +73,16 @@ public class OperationRegistry
                 continue;
             }
 
+            if (string.Equals(name, MenuAuthorizedOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
+            {
+                handlers[name] = new MenuAuthorizedOperation(
+                    name,
+                    definition.StoredProcedure,
+                    _sqlExecutor,
+                    _loggerFactory.CreateLogger<MenuAuthorizedOperation>());
+                continue;
+            }
+
             if (string.Equals(name, RobinetDeudasOperation.OperationKey, StringComparison.OrdinalIgnoreCase))
             {
                 handlers[name] = new RobinetDeudasOperation(
