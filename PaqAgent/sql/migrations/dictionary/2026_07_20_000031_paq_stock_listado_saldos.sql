@@ -110,8 +110,7 @@ BEGIN
             @where         NVARCHAR(MAX),
             @having        NVARCHAR(MAX),
             @grouped       NVARCHAR(MAX),
-            @sqlTotal      NVARCHAR(MAX),
-            @sqlPaged      NVARCHAR(MAX);
+            @sqlTemp       NVARCHAR(MAX);
 
     SET @codArticuExpr = CASE
         WHEN @hasCodArticuS20 = 1 THEN N'sta20.COD_ARTICU'
@@ -205,32 +204,37 @@ BEGIN
         GROUP BY ' + @codArticuExpr + N', ' + @codDeposiExpr + N'
         ' + @having;
 
-    SET @sqlTotal = N'
-        SELECT COUNT(*) AS total_filas
-        FROM (' + @grouped + N') sub';
+    DECLARE @offset INT = (@page - 1) * @page_size;
 
-    EXEC sp_executesql @sqlTotal,
+    -- Materializar el agrupado una sola vez. SELECT INTO dentro de
+    -- sp_executesql no deja #temp visible al batch del SP (se destruye
+    -- al terminar el nested scope); CREATE + INSERT sí.
+    DROP TABLE IF EXISTS #paq_stock_saldos;
+    CREATE TABLE #paq_stock_saldos (
+        cod_articu  NVARCHAR(20),
+        descripcio  NVARCHAR(200),
+        cod_deposi  NVARCHAR(20),
+        saldo       DECIMAL(18, 2),
+        empresa     NVARCHAR(100)
+    );
+
+    SET @sqlTemp = N'
+        INSERT INTO #paq_stock_saldos (cod_articu, descripcio, cod_deposi, saldo, empresa)
+        SELECT sub.cod_articu, sub.descripcio, sub.cod_deposi, sub.saldo, sub.empresa
+        FROM (' + @grouped + N') sub
+    ';
+
+    EXEC sp_executesql @sqlTemp,
         N'@p_fr NVARCHAR(10), @p_ca NVARCHAR(20), @p_cd NVARCHAR(20), @p_emp NVARCHAR(100)',
         @p_fr = @fecha_referencia, @p_ca = @cod_articu,
         @p_cd = @cod_deposi, @p_emp = @empresa;
 
-    DECLARE @offset INT = (@page - 1) * @page_size;
+    SELECT COUNT(*) AS total_filas FROM #paq_stock_saldos;
 
-    SET @sqlPaged = N'
-        SELECT
-            sub.cod_articu,
-            sub.descripcio,
-            sub.cod_deposi,
-            sub.saldo,
-            sub.empresa
-        FROM (' + @grouped + N') sub
-        ORDER BY sub.cod_articu ASC, sub.cod_deposi ASC
-        OFFSET @p_offset ROWS FETCH NEXT @p_page_size ROWS ONLY';
+    SELECT cod_articu, descripcio, cod_deposi, saldo, empresa
+    FROM #paq_stock_saldos
+    ORDER BY cod_articu ASC, cod_deposi ASC
+    OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY;
 
-    EXEC sp_executesql @sqlPaged,
-        N'@p_fr NVARCHAR(10), @p_ca NVARCHAR(20), @p_cd NVARCHAR(20), @p_emp NVARCHAR(100),
-          @p_offset INT, @p_page_size INT',
-        @p_fr = @fecha_referencia, @p_ca = @cod_articu,
-        @p_cd = @cod_deposi, @p_emp = @empresa,
-        @p_offset = @offset, @p_page_size = @page_size;
+    DROP TABLE IF EXISTS #paq_stock_saldos;
 END
